@@ -188,7 +188,7 @@
           <button id="deadman">Hold To Drive</button>
           <button id="estop">EMERGENCY STOP</button>
         </div>
-        <p class="hint">Keyboard: W/S throttle, A/D steer, Space stop. Releasing dead-man sends 0,0.</p>
+        <p class="hint">Keyboard: hold Arrow keys (or W/A/S/D) to drive, Space stop. Releasing keys sends 0,0.</p>
       </article>
 
       <article class="panel">
@@ -220,6 +220,13 @@
       outputLeft: 0,
       outputRight: 0,
       lastHttpSendMs: 0,
+    };
+
+    const keyState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
     };
 
     function norm(value) {
@@ -420,20 +427,59 @@
       sendControl();
     });
 
+    function keyToControl(code) {
+      if (code === "ArrowUp" || code === "KeyW") return "up";
+      if (code === "ArrowDown" || code === "KeyS") return "down";
+      if (code === "ArrowLeft" || code === "KeyA") return "left";
+      if (code === "ArrowRight" || code === "KeyD") return "right";
+      return "";
+    }
+
+    function applyKeyDrive() {
+      const steer = (keyState.left ? -100 : 0) + (keyState.right ? 100 : 0);
+      const throttle = keyState.up ? 100 : 0;
+      throttleEl.value = String(throttle);
+      steerEl.value = String(Math.max(-100, Math.min(100, steer)));
+
+      const driving = keyState.up || keyState.down || keyState.left || keyState.right;
+      state.deadman = driving;
+      setJoystickVisual(0, throttle ? -1 : 0);
+      updateNumbers();
+      renderStatus();
+      sendControl();
+    }
+
     window.addEventListener("keydown", (e) => {
-      const t = Number(throttleEl.value);
-      const s = Number(steerEl.value);
       if (e.code === "Space") {
         emergencyStop();
         e.preventDefault();
         return;
       }
-      if (e.key === "w" || e.key === "ArrowUp") throttleEl.value = String(Math.min(100, t + 5));
-      if (e.key === "s" || e.key === "ArrowDown") throttleEl.value = String(Math.max(0, t - 5));
-      if (e.key === "a" || e.key === "ArrowLeft") steerEl.value = String(Math.max(-100, s - 5));
-      if (e.key === "d" || e.key === "ArrowRight") steerEl.value = String(Math.min(100, s + 5));
-      updateNumbers();
-      sendControl();
+
+      const mapped = keyToControl(e.code);
+      if (!mapped) return;
+      if (mapped === "down") {
+        throttleEl.value = "0";
+      }
+      keyState[mapped] = true;
+      applyKeyDrive();
+      e.preventDefault();
+    });
+
+    window.addEventListener("keyup", (e) => {
+      const mapped = keyToControl(e.code);
+      if (!mapped) return;
+      keyState[mapped] = false;
+      applyKeyDrive();
+      e.preventDefault();
+    });
+
+    window.addEventListener("blur", () => {
+      keyState.up = false;
+      keyState.down = false;
+      keyState.left = false;
+      keyState.right = false;
+      applyKeyDrive();
     });
 
     document.addEventListener("visibilitychange", () => {
