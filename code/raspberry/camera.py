@@ -11,6 +11,7 @@ except ImportError:
 class UsbCamera:
     def __init__(self, index: int = 0, width: int = 640, height: int = 480, fps: int = 20) -> None:
         self.index = index
+        self.active_index = index
         self.width = width
         self.height = height
         self.fps = fps
@@ -46,7 +47,8 @@ class UsbCamera:
             age_ms = int((time.monotonic() - self._last_frame_at) * 1000)
         return {
             "available": self.available,
-            "camera_index": self.index,
+            "camera_index": self.active_index,
+            "camera_index_requested": self.index,
             "last_error": self._last_error,
             "has_frame": self._frame_jpeg is not None,
             "last_frame_age_ms": age_ms,
@@ -93,19 +95,37 @@ class UsbCamera:
             time.sleep(sleep_for)
 
     def _ensure_capture_open(self) -> bool:
+        if cv2 is None:
+            self._last_error = "opencv-python not installed"
+            return False
+
         if self._capture is not None and self._capture.isOpened():
             return True
 
-        self._capture = cv2.VideoCapture(self.index)
-        if not self._capture or not self._capture.isOpened():
-            self._last_error = f"cannot open camera index {self.index}"
-            self._release_capture()
-            return False
+        candidates = [self.index, 0, 1, 2, 3]
+        seen = set()
+        for idx in candidates:
+            if idx in seen:
+                continue
+            seen.add(idx)
 
-        self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
-        self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        self._capture.set(cv2.CAP_PROP_FPS, self.fps)
-        return True
+            cap = cv2.VideoCapture(idx)
+            if not cap or not cap.isOpened():
+                if cap is not None:
+                    cap.release()
+                continue
+
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self._capture = cap
+            self.active_index = idx
+            self._last_error = ""
+            return True
+
+        self._last_error = f"cannot open camera (tried indexes: {sorted(seen)})"
+        self._release_capture()
+        return False
 
     def _release_capture(self) -> None:
         if self._capture is not None:

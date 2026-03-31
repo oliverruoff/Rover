@@ -14,8 +14,8 @@ from camera import UsbCamera
 from serial_bridge import Esp32SerialBridge
 
 
-CONTROL_HZ = float(os.getenv("ROVER_CONTROL_HZ", "20"))
-HEARTBEAT_TIMEOUT_SEC = float(os.getenv("ROVER_HEARTBEAT_TIMEOUT_SEC", "0.35"))
+CONTROL_HZ = max(10.0, float(os.getenv("ROVER_CONTROL_HZ", "20")))
+HEARTBEAT_TIMEOUT_SEC = max(0.35, float(os.getenv("ROVER_HEARTBEAT_TIMEOUT_SEC", "0.35")))
 MAX_DAC = int(os.getenv("ROVER_MAX_DAC", "180"))
 
 
@@ -62,6 +62,14 @@ class RoverController:
             if max_dac is not None:
                 self._state.max_dac = max(0, min(255, int(max_dac)))
             self._state.updated_at = time.monotonic()
+
+            if self._state.deadman:
+                left, right = mix_forward_only(self._state.throttle, self._state.steer, self._state.max_dac)
+            else:
+                left, right = 0, 0
+
+        self.bridge.send(left, right)
+        self.last_output = (left, right)
 
     def emergency_stop(self) -> None:
         with self._lock:
@@ -185,6 +193,11 @@ async def index() -> str:
 @app.get("/api/status")
 async def status() -> JSONResponse:
     payload = {
+        "config": {
+            "control_hz": CONTROL_HZ,
+            "heartbeat_timeout_sec": HEARTBEAT_TIMEOUT_SEC,
+            "max_dac_default": MAX_DAC,
+        },
         "serial": bridge.status(),
         "control": controller.snapshot(),
         "camera": camera.status(),

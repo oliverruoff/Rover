@@ -20,6 +20,7 @@ This service runs on the Raspberry Pi and provides:
   - websocket disconnects
 - Manual emergency stop endpoint (`POST /api/stop`).
 - USB camera MJPEG stream (`/api/camera.mjpg`) using OpenCV.
+- Camera auto-probe fallback across indexes `0..3` when the configured index is unavailable.
 
 ## Dependencies
 
