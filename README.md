@@ -25,6 +25,7 @@ This project is a custom garden rover built from reclaimed hoverboard hardware a
 - **Raspberry Pi** runs high-level control (web UI + command logic).
 - **ESP32 (MicroPython)** acts as motor throttle interface.
 - **Link between Pi and ESP32:** USB serial.
+- **USB camera** is connected to Raspberry Pi and streamed into the control UI.
 - **Throttle outputs from ESP32:**
   - `GPIO25` (DAC1) -> left side throttle
   - `GPIO26` (DAC2) -> right side throttle
@@ -73,27 +74,37 @@ ACK:<left>,<right>
 
 Even with software safety in place, initial tests should be done with wheels lifted or drivetrain disengaged.
 
-## Raspberry Pi Web Control (Planned)
+## Raspberry Pi Web Control (Implemented)
 
 Directory: `code/raspberry/`
 
-Target design:
+Implemented design:
 
 - Python ASGI app served by `uvicorn`.
 - Minimal dependency footprint.
 - Browser-based UI for:
-  - Forward/reverse and left/right steering
+  - Forward-only throttle and left/right steering
   - Live stop command
   - Adjustable max throttle limit
   - Connection/status display (ESP32 serial link)
+  - Live USB camera preview
 
 Recommended minimal stack:
 
 - `uvicorn`
 - `fastapi` (lightweight routing/API)
 - `pyserial` (USB serial communication with ESP32)
+- `opencv-python-headless` (USB camera capture and MJPEG stream)
 
 UI can be plain HTML/CSS/JavaScript served directly by the same app.
+
+Implemented endpoints:
+
+- `GET /` -> web control UI
+- `WS /ws` -> low-latency control commands
+- `GET /api/status` -> serial + control + camera status
+- `POST /api/stop` -> immediate emergency stop
+- `GET /api/camera.mjpg` -> live USB camera stream
 
 ## Repository Layout
 
@@ -104,13 +115,19 @@ Rover/
     esp32/
       main.py              # MicroPython firmware on ESP32
       README.md            # ESP32 notes
-    raspberry/             # Raspberry Pi server + web UI (to be implemented)
+    raspberry/             # Raspberry Pi server + web UI
+      app.py               # FastAPI app + control loop + websocket API
+      serial_bridge.py     # ESP32 USB serial bridge
+      camera.py            # USB camera capture and MJPEG stream
+      index.html           # Browser control interface
+      requirements.txt     # Python dependencies
+      README.md            # Raspberry Pi setup and usage
 ```
 
 ## Next Steps
 
-1. Implement the Raspberry Pi control server in `code/raspberry/`.
-2. Add serial bridge logic (HTTP/WebSocket input -> serial output to ESP32).
-3. Build a mobile-friendly steering UI with a dead-man stop behavior.
-4. Add startup checks and an emergency-stop endpoint.
-5. Document calibration and field-test procedure.
+1. Add an optional reverse mode once controller reverse behavior is fully validated.
+2. Add authentication/network hardening for remote access.
+3. Add command logging and basic telemetry history.
+4. Validate camera settings for outdoor light and vibration.
+5. Document calibration and field-test procedure with measured limits.

@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Garden Rover Control</title>
+  <style>
+    :root {
+      --bg: #eef3ea;
+      --panel: #f8fbf6;
+      --panel-2: #e6efdf;
+      --text: #132015;
+      --accent: #2d6a4f;
+      --warn: #a23a2f;
+      --ok: #317a45;
+      --muted: #5f6d62;
+    }
+    body {
+      margin: 0;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at 20% 10%, #d4e8cb 0%, var(--bg) 45%, #dce9d6 100%);
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+    .panel {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid #c6d8bf;
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 20px rgba(45, 106, 79, 0.08);
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 900px) {
+      .grid {
+        grid-template-columns: 1.15fr 1fr;
+      }
+    }
+    .row {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: 1fr;
+      align-items: center;
+      margin: 10px 0;
+    }
+    label {
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+    input[type="range"] {
+      width: 100%;
+    }
+    .numbers {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .status {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 0.88rem;
+    }
+    .badge {
+      background: #dbe8d5;
+      border: 1px solid #bbcfb1;
+      border-radius: 999px;
+      padding: 5px 10px;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .btns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    #deadman {
+      background: #d9eecf;
+      color: #20452f;
+      border: 1px solid #b6d6a8;
+      touch-action: none;
+    }
+    #estop {
+      background: #b13228;
+      color: #fff;
+    }
+    .camera {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #b8ccb0;
+      background: #d4e0cf;
+      aspect-ratio: 4 / 3;
+      object-fit: cover;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 0.87rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="panel">
+      <h1>Garden Rover Control</h1>
+      <div class="status" id="statusBadges"></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="row">
+          <label for="throttle">Throttle (forward only)</label>
+          <input id="throttle" type="range" min="0" max="100" value="0">
+        </div>
+        <div class="row">
+          <label for="steer">Steer (left/right)</label>
+          <input id="steer" type="range" min="-100" max="100" value="0">
+        </div>
+        <div class="row">
+          <label for="maxDac">Max output limit (DAC)</label>
+          <input id="maxDac" type="range" min="0" max="255" value="180">
+        </div>
+
+        <div class="numbers" id="numbers"></div>
+
+        <div class="btns">
+          <button id="deadman">Hold To Drive</button>
+          <button id="estop">EMERGENCY STOP</button>
+        </div>
+        <p class="hint">Keyboard: W/S throttle, A/D steer, Space stop. Releasing dead-man sends 0,0.</p>
+      </article>
+
+      <article class="panel">
+        <img class="camera" id="camera" src="/api/camera.mjpg" alt="USB camera stream">
+        <p class="hint">Live USB camera stream from Raspberry Pi.</p>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const throttleEl = document.getElementById("throttle");
+    const steerEl = document.getElementById("steer");
+    const maxDacEl = document.getElementById("maxDac");
+    const numbersEl = document.getElementById("numbers");
+    const statusEl = document.getElementById("statusBadges");
+    const deadmanEl = document.getElementById("deadman");
+    const estopEl = document.getElementById("estop");
+
+    const state = {
+      deadman: false,
+      ws: null,
+      wsConnected: false,
+      serialConnected: false,
+      cameraOk: false,
+      ack: "",
+      outputLeft: 0,
+      outputRight: 0,
+    };
+
+    function norm(value) {
+      return Math.max(-1, Math.min(1, value));
+    }
+
+    function payload() {
+      return {
+        throttle: norm(Number(throttleEl.value) / 100),
+        steer: norm(Number(steerEl.value) / 100),
+        deadman: state.deadman,
+        max_dac: Number(maxDacEl.value),
+      };
+    }
+
+    function updateNumbers() {
+      numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} max_dac=${maxDacEl.value} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
+    }
+
+    function badge(label, ok) {
+      const cls = ok ? "ok" : "warn";
+      return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function renderStatus() {
+      statusEl.innerHTML = [
+        badge(`ws ${state.wsConnected ? "connected" : "offline"}`, state.wsConnected),
+        badge(`serial ${state.serialConnected ? "connected" : "offline"}`, state.serialConnected),
+        badge(`camera ${state.cameraOk ? "ok" : "no frame"}`, state.cameraOk),
+        badge(`deadman ${state.deadman ? "held" : "released"}`, state.deadman),
+      ].join(" ");
+    }
+
+    function sendControl() {
+      if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      state.ws.send(JSON.stringify(payload()));
+    }
+
+    function connectWs() {
+      const proto = location.protocol === "https:" ? "wss" : "ws";
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      state.ws = ws;
+      ws.onopen = () => {
+        state.wsConnected = true;
+        renderStatus();
+      };
+      ws.onclose = () => {
+        state.wsConnected = false;
+        renderStatus();
+        setTimeout(connectWs, 1000);
+      };
+      ws.onerror = () => {
+        state.wsConnected = false;
+        renderStatus();
+      };
+    }
+
+    async function pollStatus() {
+      try {
+        const res = await fetch("/api/status", { cache: "no-store" });
+        const data = await res.json();
+        state.serialConnected = Boolean(data?.serial?.connected);
+        state.cameraOk = Boolean(data?.camera?.has_frame);
+        state.ack = data?.serial?.last_ack || "";
+        state.outputLeft = data?.control?.output?.left ?? 0;
+        state.outputRight = data?.control?.output?.right ?? 0;
+      } catch (_) {
+        state.serialConnected = false;
+      }
+      updateNumbers();
+      renderStatus();
+    }
+
+    async function emergencyStop() {
+      state.deadman = false;
+      throttleEl.value = "0";
+      steerEl.value = "0";
+      renderStatus();
+      updateNumbers();
+      sendControl();
+      await fetch("/api/stop", { method: "POST" });
+    }
+
+    function setDeadman(on) {
+      state.deadman = on;
+      renderStatus();
+      sendControl();
+    }
+
+    for (const ev of ["mousedown", "touchstart", "pointerdown"]) {
+      deadmanEl.addEventListener(ev, (e) => {
+        e.preventDefault();
+        setDeadman(true);
+      });
+    }
+    for (const ev of ["mouseup", "mouseleave", "touchend", "touchcancel", "pointerup", "pointercancel"]) {
+      deadmanEl.addEventListener(ev, (e) => {
+        e.preventDefault();
+        setDeadman(false);
+      });
+    }
+
+    estopEl.addEventListener("click", emergencyStop);
+
+    throttleEl.addEventListener("input", () => {
+      updateNumbers();
+      sendControl();
+    });
+    steerEl.addEventListener("input", () => {
+      updateNumbers();
+      sendControl();
+    });
+    maxDacEl.addEventListener("input", () => {
+      updateNumbers();
+      sendControl();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      const t = Number(throttleEl.value);
+      const s = Number(steerEl.value);
+      if (e.code === "Space") {
+        emergencyStop();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "w" || e.key === "ArrowUp") throttleEl.value = String(Math.min(100, t + 5));
+      if (e.key === "s" || e.key === "ArrowDown") throttleEl.value = String(Math.max(0, t - 5));
+      if (e.key === "a" || e.key === "ArrowLeft") steerEl.value = String(Math.max(-100, s - 5));
+      if (e.key === "d" || e.key === "ArrowRight") steerEl.value = String(Math.min(100, s + 5));
+      updateNumbers();
+      sendControl();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        emergencyStop();
+      }
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/stop", "");
+      }
+    });
+
+    connectWs();
+    updateNumbers();
+    renderStatus();
+    setInterval(sendControl, 60);
+    setInterval(pollStatus, 500);
+  </script>
+</body>
+</html>
