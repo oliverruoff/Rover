@@ -11,6 +11,7 @@ This service runs on the Raspberry Pi and provides:
 
 - FastAPI + Uvicorn server with low dependency count.
 - WebSocket control channel (`/ws`) for low-latency steering.
+- HTTP control fallback (`/api/control`) if WebSocket is unavailable.
 - Fixed-rate control loop (default 20 Hz).
 - Forward-only mixing (safety-first): steering reduces one side.
 - Automatic stop when:
@@ -63,6 +64,7 @@ Then open:
 
 - `GET /` -> web control UI
 - `WS /ws` -> control input (`throttle`, `steer`, `deadman`, `max_dac`)
+- `POST /api/control` -> HTTP fallback control input
 - `GET /api/status` -> serial, control, and camera status
 - `POST /api/stop` -> immediate `0,0` output
 - `GET /api/camera.mjpg` -> USB camera stream
@@ -71,6 +73,7 @@ Then open:
 
 - Throttle in the UI is forward-only (`0..100`).
 - Steering in the UI is `-100..100`.
+- Joystick: drag up to move forward, left/right to steer, release to stop.
 - Output values sent to ESP32 are DAC integers `0..255`.
 - ESP32 watchdog still provides an extra safety layer if commands stop.
 

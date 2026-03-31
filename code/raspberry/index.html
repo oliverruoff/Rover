@@ -120,6 +120,38 @@
       color: var(--muted);
       font-size: 0.87rem;
     }
+    .joystick-wrap {
+      margin: 12px 0 8px;
+      display: flex;
+      justify-content: center;
+    }
+    .joystick {
+      width: min(62vw, 280px);
+      height: min(62vw, 280px);
+      max-width: 280px;
+      max-height: 280px;
+      border-radius: 50%;
+      border: 2px solid #98b18f;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(45, 106, 79, 0.15) 0 16%, transparent 17% 100%),
+        radial-gradient(circle at 50% 50%, #e4f0de 0, #d0e4c7 72%, #c5d6be 100%);
+      position: relative;
+      touch-action: none;
+      box-shadow: inset 0 2px 12px rgba(45, 106, 79, 0.18);
+    }
+    .joystick-knob {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      border: 2px solid #7d9b72;
+      background: radial-gradient(circle at 35% 30%, #f4fbf0 0, #d4e7cc 65%, #bccfb4 100%);
+      position: absolute;
+      left: calc(50% - 38px);
+      top: calc(50% - 38px);
+      box-shadow: 0 4px 10px rgba(19, 32, 21, 0.2);
+      transition: transform 0.05s linear;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -142,6 +174,12 @@
         <div class="row">
           <label for="maxDac">Max output limit (DAC)</label>
           <input id="maxDac" type="range" min="0" max="255" value="180">
+        </div>
+
+        <div class="joystick-wrap">
+          <div class="joystick" id="joystick" aria-label="Drive joystick" role="application">
+            <div class="joystick-knob" id="joystickKnob"></div>
+          </div>
         </div>
 
         <div class="numbers" id="numbers"></div>
@@ -168,16 +206,20 @@
     const statusEl = document.getElementById("statusBadges");
     const deadmanEl = document.getElementById("deadman");
     const estopEl = document.getElementById("estop");
+    const joystickEl = document.getElementById("joystick");
+    const joystickKnobEl = document.getElementById("joystickKnob");
 
     const state = {
       deadman: false,
       ws: null,
       wsConnected: false,
+      usingHttpFallback: false,
       serialConnected: false,
       cameraOk: false,
       ack: "",
       outputLeft: 0,
       outputRight: 0,
+      lastHttpSendMs: 0,
     };
 
     function norm(value) {
@@ -203,19 +245,37 @@
     }
 
     function renderStatus() {
+      const transportLabel = state.wsConnected ? "ws connected" : (state.usingHttpFallback ? "http fallback" : "ws offline");
       statusEl.innerHTML = [
-        badge(`ws ${state.wsConnected ? "connected" : "offline"}`, state.wsConnected),
+        badge(transportLabel, state.wsConnected || state.usingHttpFallback),
         badge(`serial ${state.serialConnected ? "connected" : "offline"}`, state.serialConnected),
         badge(`camera ${state.cameraOk ? "ok" : "no frame"}`, state.cameraOk),
         badge(`deadman ${state.deadman ? "held" : "released"}`, state.deadman),
       ].join(" ");
     }
 
-    function sendControl() {
+    async function sendControl() {
+      const msg = payload();
       if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+        const now = Date.now();
+        if (now - state.lastHttpSendMs < 120) {
+          return;
+        }
+        state.lastHttpSendMs = now;
+        try {
+          await fetch("/api/control", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(msg),
+          });
+          state.usingHttpFallback = true;
+        } catch (_) {
+          state.usingHttpFallback = false;
+        }
+        renderStatus();
         return;
       }
-      state.ws.send(JSON.stringify(payload()));
+      state.ws.send(JSON.stringify(msg));
     }
 
     function connectWs() {
@@ -224,15 +284,18 @@
       state.ws = ws;
       ws.onopen = () => {
         state.wsConnected = true;
+        state.usingHttpFallback = false;
         renderStatus();
       };
       ws.onclose = () => {
         state.wsConnected = false;
+        state.usingHttpFallback = true;
         renderStatus();
         setTimeout(connectWs, 1000);
       };
       ws.onerror = () => {
         state.wsConnected = false;
+        state.usingHttpFallback = true;
         renderStatus();
       };
     }
@@ -268,6 +331,66 @@
       renderStatus();
       sendControl();
     }
+
+    function setJoystickVisual(normX, normY) {
+      const maxPx = joystickEl.clientWidth * 0.34;
+      const xPx = normX * maxPx;
+      const yPx = normY * maxPx;
+      joystickKnobEl.style.transform = `translate(${xPx}px, ${yPx}px)`;
+    }
+
+    function applyJoystick(normX, normY) {
+      const steer = Math.round(normX * 100);
+      const throttle = Math.round(Math.max(0, -normY) * 100);
+      steerEl.value = String(Math.max(-100, Math.min(100, steer)));
+      throttleEl.value = String(Math.max(0, Math.min(100, throttle)));
+      setJoystickVisual(normX, normY);
+      updateNumbers();
+      sendControl();
+    }
+
+    function joystickCoords(evt) {
+      const rect = joystickEl.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let x = (evt.clientX - cx) / (rect.width / 2);
+      let y = (evt.clientY - cy) / (rect.height / 2);
+      const mag = Math.hypot(x, y);
+      if (mag > 1) {
+        x /= mag;
+        y /= mag;
+      }
+      return { x, y };
+    }
+
+    joystickEl.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      joystickEl.setPointerCapture(e.pointerId);
+      setDeadman(true);
+      const p = joystickCoords(e);
+      applyJoystick(p.x, p.y);
+    });
+
+    joystickEl.addEventListener("pointermove", (e) => {
+      if (!state.deadman) return;
+      const p = joystickCoords(e);
+      applyJoystick(p.x, p.y);
+    });
+
+    function releaseJoystick(e) {
+      if (e) {
+        e.preventDefault();
+      }
+      steerEl.value = "0";
+      throttleEl.value = "0";
+      setJoystickVisual(0, 0);
+      setDeadman(false);
+      updateNumbers();
+    }
+
+    joystickEl.addEventListener("pointerup", releaseJoystick);
+    joystickEl.addEventListener("pointercancel", releaseJoystick);
+    joystickEl.addEventListener("lostpointercapture", releaseJoystick);
 
     for (const ev of ["mousedown", "touchstart", "pointerdown"]) {
       deadmanEl.addEventListener(ev, (e) => {
@@ -326,6 +449,7 @@
     });
 
     connectWs();
+    setJoystickVisual(0, 0);
     updateNumbers();
     renderStatus();
     setInterval(sendControl, 60);

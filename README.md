@@ -84,6 +84,7 @@ Implemented design:
 - Minimal dependency footprint.
 - Browser-based UI for:
   - Forward-only throttle and left/right steering
+  - Touch joystick control (drag-to-drive, release-to-stop)
   - Live stop command
   - Adjustable max throttle limit
   - Connection/status display (ESP32 serial link)
@@ -102,6 +103,7 @@ Implemented endpoints:
 
 - `GET /` -> web control UI
 - `WS /ws` -> low-latency control commands
+- `POST /api/control` -> HTTP fallback control commands
 - `GET /api/status` -> serial + control + camera status
 - `POST /api/stop` -> immediate emergency stop
 - `GET /api/camera.mjpg` -> live USB camera stream

@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from pydantic import BaseModel
 
 from camera import UsbCamera
 from serial_bridge import Esp32SerialBridge
@@ -168,6 +169,13 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Garden Rover Control", lifespan=lifespan)
 
 
+class ControlMessage(BaseModel):
+    throttle: float = 0.0
+    steer: float = 0.0
+    deadman: bool = False
+    max_dac: Optional[int] = None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     html_path = Path(__file__).with_name("index.html")
@@ -188,6 +196,17 @@ async def status() -> JSONResponse:
 async def stop() -> JSONResponse:
     controller.emergency_stop()
     return JSONResponse({"ok": True, "left": 0, "right": 0})
+
+
+@app.post("/api/control")
+async def control(msg: ControlMessage) -> JSONResponse:
+    controller.update_input(
+        throttle=msg.throttle,
+        steer=msg.steer,
+        deadman=msg.deadman,
+        max_dac=msg.max_dac,
+    )
+    return JSONResponse({"ok": True, "input": controller.snapshot()["input"]})
 
 
 @app.get("/api/camera.mjpg")
