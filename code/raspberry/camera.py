@@ -34,6 +34,7 @@ class UsbCamera:
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._frame_jpeg: Optional[bytes] = None
+        self._frame_id = 0
         self._last_error = ""
         self._last_frame_at = 0.0
 
@@ -73,12 +74,18 @@ class UsbCamera:
 
     def frame_generator(self) -> Generator[bytes, None, None]:
         boundary = b"--frame\r\n"
+        last_frame_id = -1
         while not self._stop_event.is_set():
             with self._lock:
                 frame = self._frame_jpeg
+                frame_id = self._frame_id
             if frame is None:
                 time.sleep(0.05)
                 continue
+            if frame_id == last_frame_id:
+                time.sleep(0.005)
+                continue
+            last_frame_id = frame_id
             yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
 
     def _loop(self) -> None:
@@ -111,6 +118,7 @@ class UsbCamera:
 
             with self._lock:
                 self._frame_jpeg = encoded.tobytes()
+                self._frame_id += 1
                 self._last_frame_at = time.monotonic()
                 self._last_error = ""
 
@@ -141,6 +149,10 @@ class UsbCamera:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
             cap.set(cv2.CAP_PROP_FPS, self.fps)
+            try:
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            except Exception:
+                pass
             self._capture = cap
             self.active_index = idx
             self._last_error = ""
