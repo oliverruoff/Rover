@@ -155,10 +155,21 @@ CAMERA_INDEX = int(os.getenv("ROVER_CAMERA_INDEX", "0"))
 CAMERA_WIDTH = int(os.getenv("ROVER_CAMERA_WIDTH", "640"))
 CAMERA_HEIGHT = int(os.getenv("ROVER_CAMERA_HEIGHT", "480"))
 CAMERA_FPS = int(os.getenv("ROVER_CAMERA_FPS", "20"))
+CAMERA_STREAM_WIDTH = int(os.getenv("ROVER_CAMERA_STREAM_WIDTH", "480"))
+CAMERA_STREAM_HEIGHT = int(os.getenv("ROVER_CAMERA_STREAM_HEIGHT", "360"))
+CAMERA_JPEG_QUALITY = int(os.getenv("ROVER_CAMERA_JPEG_QUALITY", "50"))
 
 bridge = Esp32SerialBridge(port=SERIAL_PORT, baudrate=SERIAL_BAUD)
 controller = RoverController(bridge)
-camera = UsbCamera(index=CAMERA_INDEX, width=CAMERA_WIDTH, height=CAMERA_HEIGHT, fps=CAMERA_FPS)
+camera = UsbCamera(
+    index=CAMERA_INDEX,
+    width=CAMERA_WIDTH,
+    height=CAMERA_HEIGHT,
+    fps=CAMERA_FPS,
+    stream_width=CAMERA_STREAM_WIDTH,
+    stream_height=CAMERA_STREAM_HEIGHT,
+    jpeg_quality=CAMERA_JPEG_QUALITY,
+)
 
 
 @asynccontextmanager

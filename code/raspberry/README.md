@@ -44,6 +44,9 @@ Set via environment variables:
 - `ROVER_CAMERA_WIDTH` (default `640`)
 - `ROVER_CAMERA_HEIGHT` (default `480`)
 - `ROVER_CAMERA_FPS` (default `20`)
+- `ROVER_CAMERA_STREAM_WIDTH` (default `480`, lower = less latency)
+- `ROVER_CAMERA_STREAM_HEIGHT` (default `360`, lower = less latency)
+- `ROVER_CAMERA_JPEG_QUALITY` (default `50`, range `30..95`, lower = less latency)
 
 ## Run
 

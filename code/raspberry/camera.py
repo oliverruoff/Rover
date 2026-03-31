@@ -9,12 +9,24 @@ except ImportError:
 
 
 class UsbCamera:
-    def __init__(self, index: int = 0, width: int = 640, height: int = 480, fps: int = 20) -> None:
+    def __init__(
+        self,
+        index: int = 0,
+        width: int = 640,
+        height: int = 480,
+        fps: int = 20,
+        stream_width: int = 0,
+        stream_height: int = 0,
+        jpeg_quality: int = 55,
+    ) -> None:
         self.index = index
         self.active_index = index
         self.width = width
         self.height = height
         self.fps = fps
+        self.stream_width = max(0, int(stream_width))
+        self.stream_height = max(0, int(stream_height))
+        self.jpeg_quality = max(30, min(95, int(jpeg_quality)))
         self.available = cv2 is not None
 
         self._capture = None
@@ -49,6 +61,11 @@ class UsbCamera:
             "available": self.available,
             "camera_index": self.active_index,
             "camera_index_requested": self.index,
+            "capture_width": self.width,
+            "capture_height": self.height,
+            "stream_width": self.stream_width,
+            "stream_height": self.stream_height,
+            "jpeg_quality": self.jpeg_quality,
             "last_error": self._last_error,
             "has_frame": self._frame_jpeg is not None,
             "last_frame_age_ms": age_ms,
@@ -63,7 +80,6 @@ class UsbCamera:
                 time.sleep(0.05)
                 continue
             yield boundary + b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-            time.sleep(1.0 / max(1, self.fps))
 
     def _loop(self) -> None:
         period = 1.0 / max(1, self.fps)
@@ -80,7 +96,14 @@ class UsbCamera:
                 time.sleep(0.2)
                 continue
 
-            ok, encoded = cv2.imencode(".jpg", frame)
+            if self.stream_width > 0 and self.stream_height > 0:
+                frame = cv2.resize(frame, (self.stream_width, self.stream_height), interpolation=cv2.INTER_AREA)
+
+            ok, encoded = cv2.imencode(
+                ".jpg",
+                frame,
+                [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality],
+            )
             if not ok:
                 self._last_error = "jpeg encode failed"
                 time.sleep(0.05)
