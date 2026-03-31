@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from camera import UsbCamera
@@ -17,6 +17,7 @@ from serial_bridge import Esp32SerialBridge
 CONTROL_HZ = max(10.0, float(os.getenv("ROVER_CONTROL_HZ", "20")))
 HEARTBEAT_TIMEOUT_SEC = max(0.35, float(os.getenv("ROVER_HEARTBEAT_TIMEOUT_SEC", "0.35")))
 MAX_DAC = int(os.getenv("ROVER_MAX_DAC", "180"))
+CONTROL_OWNER_TTL_SEC = max(0.5, float(os.getenv("ROVER_CONTROL_OWNER_TTL_SEC", "0.8")))
 
 
 @dataclass
@@ -36,6 +37,8 @@ class RoverController:
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self.last_output = (0, 0)
+        self._active_client: Optional[str] = None
+        self._active_until: float = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -51,17 +54,41 @@ class RoverController:
         self.bridge.send(0, 0)
         self.last_output = (0, 0)
 
-    def update_input(self, throttle: float, steer: float, deadman: bool, max_dac: Optional[int] = None) -> None:
+    def update_input(
+        self,
+        throttle: float,
+        steer: float,
+        deadman: bool,
+        max_dac: Optional[int] = None,
+        source_id: str = "",
+    ) -> bool:
         throttle = max(-1.0, min(1.0, throttle))
         steer = max(-1.0, min(1.0, steer))
+        source = (source_id or "unknown")[:128]
+        now = time.monotonic()
 
         with self._lock:
+            if self._active_client and now > self._active_until:
+                self._active_client = None
+
+            requested_deadman = bool(deadman)
+            if requested_deadman:
+                if self._active_client not in (None, source):
+                    return False
+                self._active_client = source
+                self._active_until = now + CONTROL_OWNER_TTL_SEC
+            else:
+                if self._active_client and self._active_client != source:
+                    return False
+                self._active_client = None
+                self._active_until = 0.0
+
             self._state.throttle = throttle
             self._state.steer = steer
-            self._state.deadman = bool(deadman)
+            self._state.deadman = requested_deadman
             if max_dac is not None:
                 self._state.max_dac = max(0, min(255, int(max_dac)))
-            self._state.updated_at = time.monotonic()
+            self._state.updated_at = now
 
             if self._state.deadman:
                 left, right = mix_forward_only(self._state.throttle, self._state.steer, self._state.max_dac)
@@ -70,9 +97,12 @@ class RoverController:
 
         self.bridge.send(left, right)
         self.last_output = (left, right)
+        return True
 
     def emergency_stop(self) -> None:
         with self._lock:
+            self._active_client = None
+            self._active_until = 0.0
             self._state.deadman = False
             self._state.throttle = 0.0
             self._state.steer = 0.0
@@ -98,6 +128,7 @@ class RoverController:
                 "deadman": state.deadman,
                 "max_dac": state.max_dac,
                 "age_ms": age_ms,
+                "active_client": self._active_client,
             },
             "output": {"left": self.last_output[0], "right": self.last_output[1]},
         }
@@ -107,6 +138,9 @@ class RoverController:
         while not self._stop_event.is_set():
             start = time.monotonic()
             with self._lock:
+                if self._active_client and start > self._active_until:
+                    self._active_client = None
+
                 state = ControlInput(
                     throttle=self._state.throttle,
                     steer=self._state.steer,
@@ -138,10 +172,13 @@ def mix_forward_only(throttle: float, steer: float, max_dac: int) -> tuple[int, 
     left = t
     right = t
 
+    # Apply a softer steering curve so small stick offsets create
+    # small differential changes instead of quickly killing one side.
+    steer_amount = abs(s) ** 2
     if s > 0:
-        right *= 1.0 - s
+        right *= 1.0 - steer_amount
     elif s < 0:
-        left *= 1.0 - abs(s)
+        left *= 1.0 - steer_amount
 
     left_dac = int(round(max(0.0, min(1.0, left)) * max_dac))
     right_dac = int(round(max(0.0, min(1.0, right)) * max_dac))
@@ -185,7 +222,7 @@ async def lifespan(_: FastAPI):
         camera.stop()
 
 
-app = FastAPI(title="Garden Rover Control", lifespan=lifespan)
+app = FastAPI(title="Rover Control", lifespan=lifespan)
 
 
 class ControlMessage(BaseModel):
@@ -193,12 +230,19 @@ class ControlMessage(BaseModel):
     steer: float = 0.0
     deadman: bool = False
     max_dac: Optional[int] = None
+    client_id: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     html_path = Path(__file__).with_name("index.html")
     return html_path.read_text(encoding="utf-8")
+
+
+@app.get("/favicon.svg")
+async def favicon() -> FileResponse:
+    icon_path = Path(__file__).with_name("favicon.svg")
+    return FileResponse(icon_path, media_type="image/svg+xml")
 
 
 @app.get("/api/status")
@@ -223,14 +267,17 @@ async def stop() -> JSONResponse:
 
 
 @app.post("/api/control")
-async def control(msg: ControlMessage) -> JSONResponse:
-    controller.update_input(
+async def control(msg: ControlMessage, request: Request) -> JSONResponse:
+    client_host = request.client.host if request.client else "http"
+    source_id = f"http:{client_host}:{msg.client_id or 'anon'}"
+    applied = controller.update_input(
         throttle=msg.throttle,
         steer=msg.steer,
         deadman=msg.deadman,
         max_dac=msg.max_dac,
+        source_id=source_id,
     )
-    return JSONResponse({"ok": True, "input": controller.snapshot()["input"]})
+    return JSONResponse({"ok": True, "applied": applied, "input": controller.snapshot()["input"]})
 
 
 @app.get("/api/camera.mjpg")
@@ -243,6 +290,9 @@ async def mjpeg_stream() -> StreamingResponse:
 @app.websocket("/ws")
 async def ws_control(websocket: WebSocket) -> None:
     await websocket.accept()
+    ws_client = websocket.client
+    ws_source_base = f"ws:{ws_client.host if ws_client else 'unknown'}:{ws_client.port if ws_client else '0'}"
+    last_source_id = ws_source_base
     try:
         while True:
             msg = await websocket.receive_json()
@@ -250,7 +300,16 @@ async def ws_control(websocket: WebSocket) -> None:
             steer = float(msg.get("steer", 0.0))
             deadman = bool(msg.get("deadman", False))
             max_dac = msg.get("max_dac")
-            controller.update_input(throttle=throttle, steer=steer, deadman=deadman, max_dac=max_dac)
-            await websocket.send_json({"ok": True})
+            client_id = str(msg.get("client_id", "anon"))[:64]
+            source_id = f"{ws_source_base}:{client_id}"
+            last_source_id = source_id
+            applied = controller.update_input(
+                throttle=throttle,
+                steer=steer,
+                deadman=deadman,
+                max_dac=max_dac,
+                source_id=source_id,
+            )
+            await websocket.send_json({"ok": True, "applied": applied})
     except WebSocketDisconnect:
-        controller.emergency_stop()
+        controller.update_input(throttle=0.0, steer=0.0, deadman=False, source_id=last_source_id)

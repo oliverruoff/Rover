@@ -14,6 +14,7 @@ class BridgeState:
     baudrate: int = 115200
     last_error: str = ""
     last_ack: str = ""
+    last_ack_at: float = 0.0
     last_message: str = ""
     last_write: str = ""
     last_message_at: float = 0.0
@@ -73,6 +74,7 @@ class Esp32SerialBridge:
                 baudrate=self._state.baudrate,
                 last_error=self._state.last_error,
                 last_ack=self._state.last_ack,
+                last_ack_at=self._state.last_ack_at,
                 last_message=self._state.last_message,
                 last_write=self._state.last_write,
                 last_message_at=self._state.last_message_at,
@@ -83,6 +85,12 @@ class Esp32SerialBridge:
         if state.last_message_at > 0:
             age_ms = int((now - state.last_message_at) * 1000)
 
+        ack_age_ms = None
+        if state.last_ack_at > 0:
+            ack_age_ms = int((now - state.last_ack_at) * 1000)
+
+        app_running = bool(state.connected and state.last_ack and ack_age_ms is not None and ack_age_ms <= 1500)
+
         return {
             "connected": state.connected,
             "port": state.port,
@@ -92,6 +100,8 @@ class Esp32SerialBridge:
             "last_message": state.last_message,
             "last_write": state.last_write,
             "last_message_age_ms": age_ms,
+            "last_ack_age_ms": ack_age_ms,
+            "app_running": app_running,
         }
 
     def _read_loop(self) -> None:
@@ -127,6 +137,7 @@ class Esp32SerialBridge:
                 self._state.last_message_at = time.monotonic()
                 if line.startswith("ACK:"):
                     self._state.last_ack = line
+                    self._state.last_ack_at = self._state.last_message_at
 
     def _ensure_open(self) -> bool:
         if self._serial and self._serial.is_open:

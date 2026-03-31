@@ -3,51 +3,103 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Garden Rover Control</title>
+  <title>Rover Control</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     :root {
-      --bg: #eef3ea;
-      --panel: #f8fbf6;
-      --panel-2: #e6efdf;
-      --text: #132015;
-      --accent: #2d6a4f;
-      --warn: #a23a2f;
-      --ok: #317a45;
-      --muted: #5f6d62;
+      --steel-1: #1a1d20;
+      --steel-2: #2a2f34;
+      --steel-3: #3b434a;
+      --plate: #14181c;
+      --panel: #20262b;
+      --panel-2: #171b1f;
+      --cat-yellow: #f1c40f;
+      --cat-yellow-dim: #c99e06;
+      --warn: #d6452a;
+      --ok: #8abf46;
+      --text: #f4f6f8;
+      --muted: #a2adb8;
+      --line: #47525d;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
     }
     body {
       margin: 0;
-      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-family: "Arial Black", "Segoe UI", sans-serif;
       color: var(--text);
-      background: radial-gradient(circle at 20% 10%, #d4e8cb 0%, var(--bg) 45%, #dce9d6 100%);
+      background:
+        linear-gradient(0deg, rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.3)),
+        repeating-linear-gradient(
+          -45deg,
+          #0f1215 0 18px,
+          #12161a 18px 36px
+        );
     }
     .wrap {
-      max-width: 1080px;
+      max-width: 1120px;
       margin: 0 auto;
-      padding: 16px;
+      padding: 20px 14px 24px;
       display: grid;
-      gap: 14px;
+      gap: 16px;
+      height: 100dvh;
+      box-sizing: border-box;
+      grid-template-rows: auto 1fr;
     }
     .panel {
-      background: linear-gradient(180deg, var(--panel), var(--panel-2));
-      border: 1px solid #c6d8bf;
-      border-radius: 14px;
-      padding: 14px;
-      box-shadow: 0 6px 20px rgba(45, 106, 79, 0.08);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.1)),
+        linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
     h1 {
       margin: 0;
-      font-size: 1.4rem;
+      font-size: 1.45rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--cat-yellow);
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    .panel:first-child {
+      border-top: 4px solid var(--cat-yellow);
     }
     .grid {
       display: grid;
-      gap: 14px;
+      gap: 16px;
       grid-template-columns: 1fr;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .grid.swap-sides #controlPanel {
+      order: 2;
+    }
+    .grid.swap-sides #cameraPanel {
+      order: 1;
     }
     @media (min-width: 900px) {
       .grid {
         grid-template-columns: 1.15fr 1fr;
       }
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .layout-btn {
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      background: linear-gradient(180deg, #ffd845, #bd9206);
+      color: #1a1a1a;
+      border: 1px solid #f5d358;
+      white-space: nowrap;
     }
     .row {
       display: grid;
@@ -56,19 +108,93 @@
       align-items: center;
       margin: 10px 0;
     }
+    .row-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
     label {
-      font-weight: 700;
-      font-size: 0.95rem;
+      font-weight: 800;
+      font-size: 0.88rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #d7dde4;
+    }
+    .value-pill {
+      min-width: 56px;
+      text-align: right;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.85rem;
+      color: #111;
+      background: linear-gradient(180deg, #ffd845, #c99e06);
+      border: 1px solid #f5d358;
+      border-radius: 999px;
+      padding: 3px 10px;
+      font-weight: 800;
     }
     input[type="range"] {
       width: 100%;
+      accent-color: var(--cat-yellow);
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      height: 34px;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid #58626c;
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          #2d353d 0 8px,
+          #253038 8px 16px
+        );
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      margin-top: -7px;
+      border-radius: 4px;
+      border: 1px solid #f5d358;
+      background: linear-gradient(180deg, #ffd845, #bd9206);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+    }
+    input[type="range"]::-moz-range-track {
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid #58626c;
+      background:
+        repeating-linear-gradient(
+          -45deg,
+          #2d353d 0 8px,
+          #253038 8px 16px
+        );
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      border: 1px solid #f5d358;
+      background: linear-gradient(180deg, #ffd845, #bd9206);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
     }
     .numbers {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.84rem;
+      font-family: "Consolas", "Courier New", monospace;
+      background: #101317;
+      border: 1px solid #3a424a;
+      border-radius: 8px;
+      padding: 10px;
     }
     .status {
       display: flex;
@@ -77,13 +203,14 @@
       font-size: 0.88rem;
     }
     .badge {
-      background: #dbe8d5;
-      border: 1px solid #bbcfb1;
+      background: linear-gradient(180deg, #2a3138, #1a1f24);
+      border: 1px solid #4f5963;
       border-radius: 999px;
       padding: 5px 10px;
+      font-weight: 700;
     }
     .ok { color: var(--ok); }
-    .warn { color: var(--warn); }
+    .warn { color: #ff8b72; }
     .btns {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -91,30 +218,40 @@
       margin-top: 8px;
     }
     button {
-      border: none;
-      border-radius: 10px;
+      border: 1px solid #59636e;
+      border-radius: 8px;
       padding: 12px;
-      font-weight: 700;
-      font-size: 1rem;
+      font-weight: 800;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
       cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease;
+    }
+    button:active {
+      transform: translateY(1px);
+      filter: brightness(0.95);
     }
     #deadman {
-      background: #d9eecf;
-      color: #20452f;
-      border: 1px solid #b6d6a8;
+      background: linear-gradient(180deg, #ffd845, var(--cat-yellow-dim));
+      color: #171717;
+      border: 1px solid #f5d358;
       touch-action: none;
     }
     #estop {
-      background: #b13228;
+      background: linear-gradient(180deg, #df5138, #9f2718);
       color: #fff;
+      border: 1px solid #f07a64;
     }
     .camera {
       width: 100%;
-      border-radius: 10px;
-      border: 1px solid #b8ccb0;
-      background: #d4e0cf;
+      border-radius: 8px;
+      border: 2px solid #5b6670;
+      background: #101317;
       aspect-ratio: 4 / 3;
+      max-height: 100%;
       object-fit: cover;
+      box-shadow: inset 0 0 0 1px #101317;
     }
     .hint {
       color: var(--muted);
@@ -131,49 +268,205 @@
       max-width: 280px;
       max-height: 280px;
       border-radius: 50%;
-      border: 2px solid #98b18f;
+      border: 3px solid #6c7782;
       background:
-        radial-gradient(circle at 50% 50%, rgba(45, 106, 79, 0.15) 0 16%, transparent 17% 100%),
-        radial-gradient(circle at 50% 50%, #e4f0de 0, #d0e4c7 72%, #c5d6be 100%);
+        radial-gradient(circle at 50% 50%, rgba(241, 196, 15, 0.2) 0 16%, transparent 17% 100%),
+        radial-gradient(circle at 50% 50%, #303840 0, #232a31 66%, #171d22 100%);
       position: relative;
       touch-action: none;
-      box-shadow: inset 0 2px 12px rgba(45, 106, 79, 0.18);
+      box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.45), 0 8px 16px rgba(0, 0, 0, 0.4);
     }
     .joystick-knob {
       width: 76px;
       height: 76px;
       border-radius: 50%;
-      border: 2px solid #7d9b72;
-      background: radial-gradient(circle at 35% 30%, #f4fbf0 0, #d4e7cc 65%, #bccfb4 100%);
+      border: 3px solid #8d98a3;
+      background: radial-gradient(circle at 35% 30%, #606a75 0, #434c55 55%, #2f363d 100%);
       position: absolute;
       left: calc(50% - 38px);
       top: calc(50% - 38px);
-      box-shadow: 0 4px 10px rgba(19, 32, 21, 0.2);
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.45);
       transition: transform 0.05s linear;
       pointer-events: none;
+    }
+    @media (max-width: 680px) {
+      .wrap {
+        padding: 10px 8px 10px;
+        gap: 8px;
+      }
+      .panel {
+        padding: 9px;
+      }
+      h1 {
+        font-size: 1.05rem;
+      }
+      .status {
+        font-size: 0.72rem;
+        gap: 6px;
+      }
+      .badge {
+        padding: 4px 8px;
+      }
+      .row {
+        gap: 4px;
+        margin: 5px 0;
+      }
+      label {
+        font-size: 0.73rem;
+      }
+      .value-pill {
+        min-width: 44px;
+        font-size: 0.72rem;
+        padding: 2px 8px;
+      }
+      input[type="range"] {
+        height: 24px;
+      }
+      input[type="range"]::-webkit-slider-runnable-track,
+      input[type="range"]::-moz-range-track {
+        height: 8px;
+      }
+      input[type="range"]::-webkit-slider-thumb,
+      input[type="range"]::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        margin-top: -6px;
+      }
+      .joystick {
+        width: min(46vw, 170px);
+        height: min(46vw, 170px);
+      }
+      .joystick-knob {
+        width: 50px;
+        height: 50px;
+        left: calc(50% - 25px);
+        top: calc(50% - 25px);
+      }
+      .numbers {
+        font-size: 0.68rem;
+        padding: 6px;
+      }
+      .btns {
+        gap: 6px;
+      }
+      button {
+        font-size: 0.74rem;
+        padding: 8px;
+      }
+      .camera {
+        aspect-ratio: 16 / 9;
+        max-height: 130px;
+      }
+      .hint {
+        display: none;
+      }
+    }
+    @media (max-height: 540px) and (orientation: landscape) {
+      .wrap {
+        max-width: 1220px;
+        padding: 8px;
+        gap: 8px;
+      }
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .panel {
+        padding: 8px;
+      }
+      .row {
+        margin: 3px 0;
+        gap: 3px;
+      }
+      label {
+        font-size: 0.68rem;
+      }
+      .value-pill {
+        min-width: 40px;
+        font-size: 0.66rem;
+        padding: 2px 6px;
+      }
+      .joystick {
+        width: min(29vw, 140px);
+        height: min(29vw, 140px);
+      }
+      .joystick-knob {
+        width: 44px;
+        height: 44px;
+        left: calc(50% - 22px);
+        top: calc(50% - 22px);
+      }
+      .numbers {
+        display: none;
+      }
+      .btns {
+        gap: 6px;
+      }
+      button {
+        font-size: 0.72rem;
+        padding: 7px;
+      }
+      .camera {
+        aspect-ratio: 16 / 9;
+      }
+      .status {
+        font-size: 0.72rem;
+      }
+      .layout-btn {
+        font-size: 0.68rem;
+        padding: 7px 8px;
+      }
+      .hint {
+        display: none;
+      }
     }
   </style>
 </head>
 <body>
   <main class="wrap">
     <section class="panel">
-      <h1>Garden Rover Control</h1>
+      <div class="topbar">
+        <h1>Rover Control</h1>
+        <button class="layout-btn" id="swapLayout">Joystick Left Side</button>
+      </div>
       <div class="status" id="statusBadges"></div>
     </section>
 
-    <section class="grid">
-      <article class="panel">
+    <section class="grid" id="mainGrid">
+      <article class="panel" id="controlPanel">
         <div class="row">
-          <label for="throttle">Throttle (forward only)</label>
+          <div class="row-head">
+            <label for="throttle">Throttle (forward only)</label>
+            <span class="value-pill" id="throttleVal">0%</span>
+          </div>
           <input id="throttle" type="range" min="0" max="100" value="0">
         </div>
         <div class="row">
-          <label for="steer">Steer (left/right)</label>
+          <div class="row-head">
+            <label for="steer">Steer (left/right)</label>
+            <span class="value-pill" id="steerVal">0%</span>
+          </div>
           <input id="steer" type="range" min="-100" max="100" value="0">
         </div>
         <div class="row">
-          <label for="maxDac">Max output limit (DAC)</label>
+          <div class="row-head">
+            <label for="maxDac">Max output limit (DAC)</label>
+            <span class="value-pill" id="maxDacVal">180</span>
+          </div>
           <input id="maxDac" type="range" min="0" max="255" value="180">
+        </div>
+        <div class="row">
+          <div class="row-head">
+            <label for="joyMinThrottle">Joystick min throttle (%)</label>
+            <span class="value-pill" id="joyMinThrottleVal">45%</span>
+          </div>
+          <input id="joyMinThrottle" type="range" min="0" max="100" value="45">
+        </div>
+        <div class="row">
+          <div class="row-head">
+            <label for="joyMaxThrottle">Joystick max throttle (%)</label>
+            <span class="value-pill" id="joyMaxThrottleVal">70%</span>
+          </div>
+          <input id="joyMaxThrottle" type="range" min="0" max="100" value="70">
         </div>
 
         <div class="joystick-wrap">
@@ -191,7 +484,7 @@
         <p class="hint">Keyboard: hold Arrow keys (or W/A/S/D) to drive, Space stop. Releasing keys sends 0,0.</p>
       </article>
 
-      <article class="panel">
+      <article class="panel" id="cameraPanel">
         <img class="camera" id="camera" src="/api/camera.mjpg" alt="USB camera stream">
         <p class="hint">Live USB camera stream from Raspberry Pi.</p>
       </article>
@@ -202,19 +495,40 @@
     const throttleEl = document.getElementById("throttle");
     const steerEl = document.getElementById("steer");
     const maxDacEl = document.getElementById("maxDac");
+    const joyMinThrottleEl = document.getElementById("joyMinThrottle");
+    const joyMaxThrottleEl = document.getElementById("joyMaxThrottle");
+    const throttleValEl = document.getElementById("throttleVal");
+    const steerValEl = document.getElementById("steerVal");
+    const maxDacValEl = document.getElementById("maxDacVal");
+    const joyMinThrottleValEl = document.getElementById("joyMinThrottleVal");
+    const joyMaxThrottleValEl = document.getElementById("joyMaxThrottleVal");
     const numbersEl = document.getElementById("numbers");
     const statusEl = document.getElementById("statusBadges");
+    const mainGridEl = document.getElementById("mainGrid");
+    const swapLayoutEl = document.getElementById("swapLayout");
     const deadmanEl = document.getElementById("deadman");
     const estopEl = document.getElementById("estop");
     const joystickEl = document.getElementById("joystick");
     const joystickKnobEl = document.getElementById("joystickKnob");
+
+    function getClientId() {
+      const key = "roverClientId";
+      const existing = sessionStorage.getItem(key);
+      if (existing) return existing;
+      const created = `client-${Math.random().toString(36).slice(2, 10)}`;
+      sessionStorage.setItem(key, created);
+      return created;
+    }
 
     const state = {
       deadman: false,
       ws: null,
       wsConnected: false,
       usingHttpFallback: false,
+      swapSides: localStorage.getItem("roverSwapSides") === "1",
+      clientId: getClientId(),
       serialConnected: false,
+      esp32AppRunning: false,
       cameraOk: false,
       ack: "",
       outputLeft: 0,
@@ -229,6 +543,9 @@
       right: false,
     };
 
+    const JOY_FORWARD_DEADZONE = 0.14;
+    const JOY_STEER_DEADZONE = 0.06;
+
     function norm(value) {
       return Math.max(-1, Math.min(1, value));
     }
@@ -239,11 +556,39 @@
         steer: norm(Number(steerEl.value) / 100),
         deadman: state.deadman,
         max_dac: Number(maxDacEl.value),
+        client_id: state.clientId,
       };
     }
 
+    function applyLayoutSwap() {
+      mainGridEl.classList.toggle("swap-sides", state.swapSides);
+      swapLayoutEl.textContent = state.swapSides ? "Joystick Right Side" : "Joystick Left Side";
+    }
+
+    function joystickThrottlePercent(forwardAmount) {
+      const amount = Math.max(0, Math.min(1, forwardAmount));
+      if (amount <= 0) {
+        return 0;
+      }
+
+      const minT = Math.max(0, Math.min(100, Number(joyMinThrottleEl.value)));
+      const maxT = Math.max(0, Math.min(100, Number(joyMaxThrottleEl.value)));
+      const low = Math.min(minT, maxT);
+      const high = Math.max(minT, maxT);
+      return Math.round(low + amount * (high - low));
+    }
+
+    function syncSliderDisplays() {
+      throttleValEl.textContent = `${throttleEl.value}%`;
+      steerValEl.textContent = `${steerEl.value}%`;
+      maxDacValEl.textContent = `${maxDacEl.value}`;
+      joyMinThrottleValEl.textContent = `${joyMinThrottleEl.value}%`;
+      joyMaxThrottleValEl.textContent = `${joyMaxThrottleEl.value}%`;
+    }
+
     function updateNumbers() {
-      numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} max_dac=${maxDacEl.value} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
+      syncSliderDisplays();
+      numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} joy_min=${joyMinThrottleEl.value} joy_max=${joyMaxThrottleEl.value} max_dac=${maxDacEl.value} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
     }
 
     function badge(label, ok) {
@@ -256,6 +601,7 @@
       statusEl.innerHTML = [
         badge(transportLabel, state.wsConnected || state.usingHttpFallback),
         badge(`serial ${state.serialConnected ? "connected" : "offline"}`, state.serialConnected),
+        badge(`esp32 app ${state.esp32AppRunning ? "running" : "not running"}`, state.esp32AppRunning),
         badge(`camera ${state.cameraOk ? "ok" : "no frame"}`, state.cameraOk),
         badge(`deadman ${state.deadman ? "held" : "released"}`, state.deadman),
       ].join(" ");
@@ -312,12 +658,14 @@
         const res = await fetch("/api/status", { cache: "no-store" });
         const data = await res.json();
         state.serialConnected = Boolean(data?.serial?.connected);
+        state.esp32AppRunning = Boolean(data?.serial?.app_running);
         state.cameraOk = Boolean(data?.camera?.has_frame);
         state.ack = data?.serial?.last_ack || "";
         state.outputLeft = data?.control?.output?.left ?? 0;
         state.outputRight = data?.control?.output?.right ?? 0;
       } catch (_) {
         state.serialConnected = false;
+        state.esp32AppRunning = false;
       }
       updateNumbers();
       renderStatus();
@@ -347,8 +695,18 @@
     }
 
     function applyJoystick(normX, normY) {
-      const steer = Math.round(normX * 100);
-      const throttle = Math.round(Math.max(0, -normY) * 100);
+      const forwardRaw = Math.max(0, -normY);
+      const forward = forwardRaw <= JOY_FORWARD_DEADZONE
+        ? 0
+        : (forwardRaw - JOY_FORWARD_DEADZONE) / (1 - JOY_FORWARD_DEADZONE);
+
+      const steerRaw = Math.max(-1, Math.min(1, normX));
+      const steerMag = Math.abs(steerRaw);
+      const steer = steerMag <= JOY_STEER_DEADZONE
+        ? 0
+        : Math.round((Math.sign(steerRaw) * (steerMag - JOY_STEER_DEADZONE) / (1 - JOY_STEER_DEADZONE)) * 100);
+
+      const throttle = joystickThrottlePercent(forward);
       steerEl.value = String(Math.max(-100, Math.min(100, steer)));
       throttleEl.value = String(Math.max(0, Math.min(100, throttle)));
       setJoystickVisual(normX, normY);
@@ -413,6 +771,11 @@
     }
 
     estopEl.addEventListener("click", emergencyStop);
+    swapLayoutEl.addEventListener("click", () => {
+      state.swapSides = !state.swapSides;
+      localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
+      applyLayoutSwap();
+    });
 
     throttleEl.addEventListener("input", () => {
       updateNumbers();
@@ -425,6 +788,12 @@
     maxDacEl.addEventListener("input", () => {
       updateNumbers();
       sendControl();
+    });
+    joyMinThrottleEl.addEventListener("input", () => {
+      updateNumbers();
+    });
+    joyMaxThrottleEl.addEventListener("input", () => {
+      updateNumbers();
     });
 
     function keyToControl(code) {
@@ -495,6 +864,7 @@
     });
 
     connectWs();
+    applyLayoutSwap();
     setJoystickVisual(0, 0);
     updateNumbers();
     renderStatus();
