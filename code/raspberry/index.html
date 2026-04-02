@@ -1069,8 +1069,8 @@
     }
 
     estopEl.addEventListener("click", emergencyStop);
-    flipLeftEl.addEventListener("click", () => flipSide("left"));
-    flipRightEl.addEventListener("click", () => flipSide("right"));
+    flipLeftEl.addEventListener("click", () => flipSide("right"));
+    flipRightEl.addEventListener("click", () => flipSide("left"));
     swapLayoutEl.addEventListener("click", () => {
       state.swapSides = !state.swapSides;
       localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
