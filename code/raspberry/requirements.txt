@@ -3,3 +3,4 @@ uvicorn>=0.35,<1.0
 pyserial>=3.5,<4.0
 opencv-python-headless>=4.10,<5.0
 websockets>=12.0,<16.0
+gpiozero>=2.0,<3.0

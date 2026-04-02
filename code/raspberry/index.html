@@ -292,6 +292,12 @@
       color: #fff;
       border: 1px solid #f07a64;
     }
+    #flipLeft,
+    #flipRight {
+      background: linear-gradient(180deg, #56616c, #303840);
+      color: #f4f6f8;
+      border: 1px solid #7a8792;
+    }
     .camera {
       width: 100%;
       border-radius: 8px;
@@ -363,11 +369,39 @@
       border-radius: 50%;
       border: 3px solid #6c7782;
       background:
-        radial-gradient(circle at 50% 50%, rgba(241, 196, 15, 0.2) 0 16%, transparent 17% 100%),
+        radial-gradient(circle at 50% 50%, rgba(241, 196, 15, 0.15) 0 16%, transparent 17% 100%),
+        linear-gradient(
+          180deg,
+          rgba(138, 191, 70, 0.25) 0 40%,
+          rgba(241, 196, 15, 0.23) 40% 60%,
+          rgba(214, 69, 42, 0.26) 60% 100%
+        ),
         radial-gradient(circle at 50% 50%, #303840 0, #232a31 66%, #171d22 100%);
       position: relative;
       touch-action: none;
       box-shadow: inset 0 4px 18px rgba(0, 0, 0, 0.45), 0 8px 16px rgba(0, 0, 0, 0.4);
+    }
+    .zone-label {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: rgba(243, 247, 251, 0.85);
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+      user-select: none;
+    }
+    .zone-top {
+      top: 14%;
+    }
+    .zone-mid {
+      top: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .zone-bottom {
+      bottom: 14%;
     }
     .joystick-knob {
       width: 76px;
@@ -542,10 +576,10 @@
           <div class="collapsible-body">
             <div class="row">
               <div class="row-head">
-                <label for="throttle">Throttle (forward only)</label>
+                <label for="throttle">Throttle</label>
                 <span class="value-pill" id="throttleVal">0%</span>
               </div>
-              <input id="throttle" type="range" min="0" max="100" value="0">
+              <input id="throttle" type="range" min="-100" max="100" value="0">
             </div>
             <div class="row">
               <div class="row-head">
@@ -587,6 +621,9 @@
           </div>
           <div class="joystick-wrap">
             <div class="joystick" id="joystick" aria-label="Drive joystick" role="application">
+              <span class="zone-label zone-top">FWD</span>
+              <span class="zone-label zone-mid">PIVOT</span>
+              <span class="zone-label zone-bottom">REV</span>
               <div class="joystick-knob" id="joystickKnob"></div>
             </div>
           </div>
@@ -597,8 +634,10 @@
         <div class="btns">
           <button id="deadman">Hold To Drive</button>
           <button id="estop">EMERGENCY STOP</button>
+          <button id="flipLeft">Flip Left</button>
+          <button id="flipRight">Flip Right</button>
         </div>
-        <p class="hint">Keyboard: hold Arrow keys (or W/A/S/D) to drive, Space stop. Releasing keys sends 0,0.</p>
+        <p class="hint">Keyboard: hold Arrow keys (or W/A/S/D) to drive forward/reverse, Space stop. Releasing keys sends 0,0.</p>
       </article>
 
       <article class="panel" id="cameraPanel">
@@ -629,6 +668,8 @@
     const swapLayoutEl = document.getElementById("swapLayout");
     const deadmanEl = document.getElementById("deadman");
     const estopEl = document.getElementById("estop");
+    const flipLeftEl = document.getElementById("flipLeft");
+    const flipRightEl = document.getElementById("flipRight");
     const joystickEl = document.getElementById("joystick");
     const joystickKnobEl = document.getElementById("joystickKnob");
 
@@ -651,11 +692,17 @@
       serialConnected: false,
       esp32AppRunning: false,
       cameraOk: false,
+      leftDirection: "forward",
+      rightDirection: "forward",
+      leftRelayActive: false,
+      rightRelayActive: false,
+      driveMode: "idle",
       ack: "",
       outputLeft: 0,
       outputRight: 0,
       lastHttpSendMs: 0,
       barDragging: false,
+      barModeActive: false,
       barPointerId: null,
       barLeftPct: 0,
       barRightPct: 0,
@@ -668,21 +715,28 @@
       right: false,
     };
 
-    const JOY_FORWARD_DEADZONE = 0.14;
-    const JOY_STEER_DEADZONE = 0.06;
+    const JOY_PIVOT_BAND = 0.20;
+    const JOY_STEER_DEADZONE = 0.10;
 
     function norm(value) {
       return Math.max(-1, Math.min(1, value));
     }
 
     function payload() {
-      return {
+      const msg = {
         throttle: norm(Number(throttleEl.value) / 100),
         steer: norm(Number(steerEl.value) / 100),
         deadman: state.deadman,
         max_dac: Number(maxDacEl.value),
         client_id: state.clientId,
       };
+
+      if (state.barModeActive) {
+        msg.left_cmd = norm(state.barLeftPct / 100);
+        msg.right_cmd = norm(state.barRightPct / 100);
+      }
+
+      return msg;
     }
 
     function applyLayoutSwap() {
@@ -721,7 +775,7 @@
 
     function updateNumbers() {
       syncSliderDisplays();
-      numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} joy_min=${joyMinThrottleEl.value} joy_max=${joyMaxThrottleEl.value} max_dac=${maxDacEl.value} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
+      numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} joy_min=${joyMinThrottleEl.value} joy_max=${joyMaxThrottleEl.value} max_dac=${maxDacEl.value} dir=${state.leftDirection}/${state.rightDirection} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
     }
 
     function badge(label, ok) {
@@ -735,6 +789,9 @@
         badge(transportLabel, state.wsConnected || state.usingHttpFallback),
         badge(`serial ${state.serialConnected ? "connected" : "offline"}`, state.serialConnected),
         badge(`esp32 app ${state.esp32AppRunning ? "running" : "not running"}`, state.esp32AppRunning),
+        badge(`left ${state.leftDirection}${state.leftRelayActive ? " flipping" : ""}`, !state.leftRelayActive),
+        badge(`right ${state.rightDirection}${state.rightRelayActive ? " flipping" : ""}`, !state.rightRelayActive),
+        badge(`mode ${state.driveMode}`, true),
         badge(`camera ${state.cameraOk ? "ok" : "no frame"}`, state.cameraOk),
         badge(`deadman ${state.deadman ? "held" : "released"}`, state.deadman),
       ].join(" ");
@@ -794,11 +851,17 @@
         state.esp32AppRunning = Boolean(data?.serial?.app_running);
         state.cameraOk = Boolean(data?.camera?.has_frame);
         state.ack = data?.serial?.last_ack || "";
+        state.leftDirection = data?.control?.direction?.left || "forward";
+        state.rightDirection = data?.control?.direction?.right || "forward";
+        state.leftRelayActive = Boolean(data?.control?.relay?.left_active);
+        state.rightRelayActive = Boolean(data?.control?.relay?.right_active);
+        state.driveMode = data?.control?.drive_mode || "idle";
         state.outputLeft = data?.control?.output?.left ?? 0;
         state.outputRight = data?.control?.output?.right ?? 0;
       } catch (_) {
         state.serialConnected = false;
         state.esp32AppRunning = false;
+        state.driveMode = "idle";
       }
       updateNumbers();
       renderStatus();
@@ -806,6 +869,7 @@
 
     async function emergencyStop() {
       state.deadman = false;
+      state.barModeActive = false;
       throttleEl.value = "0";
       steerEl.value = "0";
       renderStatus();
@@ -828,10 +892,12 @@
     }
 
     function applyJoystick(normX, normY) {
-      const forwardRaw = Math.max(0, -normY);
-      const forward = forwardRaw <= JOY_FORWARD_DEADZONE
+      state.barModeActive = false;
+      const throttleRaw = Math.max(-1, Math.min(1, -normY));
+      const throttleMag = Math.abs(throttleRaw);
+      const throttle = throttleMag <= JOY_PIVOT_BAND
         ? 0
-        : (forwardRaw - JOY_FORWARD_DEADZONE) / (1 - JOY_FORWARD_DEADZONE);
+        : Math.round(Math.sign(throttleRaw) * joystickThrottlePercent((throttleMag - JOY_PIVOT_BAND) / (1 - JOY_PIVOT_BAND)));
 
       const steerRaw = Math.max(-1, Math.min(1, normX));
       const steerMag = Math.abs(steerRaw);
@@ -839,9 +905,8 @@
         ? 0
         : Math.round((Math.sign(steerRaw) * (steerMag - JOY_STEER_DEADZONE) / (1 - JOY_STEER_DEADZONE)) * 100);
 
-      const throttle = joystickThrottlePercent(forward);
       steerEl.value = String(Math.max(-100, Math.min(100, steer)));
-      throttleEl.value = String(Math.max(0, Math.min(100, throttle)));
+      throttleEl.value = String(Math.max(-100, Math.min(100, throttle)));
       setJoystickVisual(normX, normY);
       updateNumbers();
       sendControl();
@@ -850,36 +915,40 @@
     function barPowerFromPointer(trackEl, evt) {
       const rect = trackEl.getBoundingClientRect();
       const y = evt.clientY - rect.top;
-      const norm = 1 - (y / rect.height);
-      return Math.max(0, Math.min(1, norm));
+      const norm = 1 - (2 * y / rect.height);
+      return Math.max(-1, Math.min(1, norm));
     }
 
     function applyBarDrive(leftPct, rightPct) {
-      const left = Math.max(0, Math.min(100, leftPct));
-      const right = Math.max(0, Math.min(100, rightPct));
+      const left = Math.max(-100, Math.min(100, leftPct));
+      const right = Math.max(-100, Math.min(100, rightPct));
+      state.barModeActive = true;
       state.barLeftPct = left;
       state.barRightPct = right;
 
-      const t = Math.max(left, right) / 100;
-      let steer = 0;
-      if (t > 0) {
-        if (left >= right) {
-          steer = Math.sqrt(Math.max(0, 1 - (right / 100) / t));
-        } else {
-          steer = -Math.sqrt(Math.max(0, 1 - (left / 100) / t));
-        }
-      }
+      const leftNorm = left / 100;
+      const rightNorm = right / 100;
+      const t = (leftNorm + rightNorm) / 2;
+      const steer = (leftNorm - rightNorm) / 2;
 
       throttleEl.value = String(Math.round(t * 100));
       steerEl.value = String(Math.round(steer * 100));
       setJoystickVisual(steer, -t);
 
       const maxOut = Math.max(0, Math.min(255, Number(maxDacEl.value)));
-      state.outputLeft = Math.round((left / 100) * maxOut);
-      state.outputRight = Math.round((right / 100) * maxOut);
+      state.outputLeft = Math.round((Math.abs(left) / 100) * maxOut);
+      state.outputRight = Math.round((Math.abs(right) / 100) * maxOut);
 
       updateNumbers();
       sendControl();
+    }
+
+    async function flipSide(side) {
+      try {
+        await fetch(`/api/flip/${side}`, { method: "POST" });
+        await pollStatus();
+      } catch (_) {
+      }
     }
 
     function startBarDrive(trackEl, side, evt) {
@@ -888,9 +957,10 @@
       state.barPointerId = evt.pointerId;
       trackEl.setPointerCapture(evt.pointerId);
 
-      const maxOut = Math.max(1, Math.min(255, Number(maxDacEl.value)));
-      state.barLeftPct = Math.max(0, Math.min(100, (Number(state.outputLeft) || 0) / maxOut * 100));
-      state.barRightPct = Math.max(0, Math.min(100, (Number(state.outputRight) || 0) / maxOut * 100));
+      // Fresh bar-drive start: default the untouched side to zero
+      // so one-bar control only powers one motor.
+      state.barLeftPct = 0;
+      state.barRightPct = 0;
 
       state.deadman = true;
       renderStatus();
@@ -919,6 +989,7 @@
         return;
       }
       state.barDragging = false;
+      state.barModeActive = false;
       state.barPointerId = null;
       state.barLeftPct = 0;
       state.barRightPct = 0;
@@ -961,6 +1032,7 @@
       if (e) {
         e.preventDefault();
       }
+      state.barModeActive = false;
       steerEl.value = "0";
       throttleEl.value = "0";
       setJoystickVisual(0, 0);
@@ -997,6 +1069,8 @@
     }
 
     estopEl.addEventListener("click", emergencyStop);
+    flipLeftEl.addEventListener("click", () => flipSide("left"));
+    flipRightEl.addEventListener("click", () => flipSide("right"));
     swapLayoutEl.addEventListener("click", () => {
       state.swapSides = !state.swapSides;
       localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
@@ -1031,14 +1105,15 @@
     }
 
     function applyKeyDrive() {
+      state.barModeActive = false;
       const steer = (keyState.left ? -100 : 0) + (keyState.right ? 100 : 0);
-      const throttle = keyState.up ? 100 : 0;
+      const throttle = (keyState.up ? 100 : 0) + (keyState.down ? -100 : 0);
       throttleEl.value = String(throttle);
       steerEl.value = String(Math.max(-100, Math.min(100, steer)));
 
       const driving = keyState.up || keyState.down || keyState.left || keyState.right;
       state.deadman = driving;
-      setJoystickVisual(0, throttle ? -1 : 0);
+      setJoystickVisual(steer / 100, -throttle / 100);
       updateNumbers();
       renderStatus();
       sendControl();
@@ -1053,9 +1128,6 @@
 
       const mapped = keyToControl(e.code);
       if (!mapped) return;
-      if (mapped === "down") {
-        throttleEl.value = "0";
-      }
       keyState[mapped] = true;
       applyKeyDrive();
       e.preventDefault();
