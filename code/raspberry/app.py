@@ -45,6 +45,7 @@ class SideState:
     pulse_until: float = 0.0
     pending_direction: int = 1
     ready_for_flip: bool = False
+    last_command_sign: int = 0
 
     @property
     def relay_active(self) -> bool:
@@ -220,12 +221,14 @@ class RoverController:
                     pulse_until=self._left_side.pulse_until,
                     pending_direction=self._left_side.pending_direction,
                     ready_for_flip=self._left_side.ready_for_flip,
+                    last_command_sign=self._left_side.last_command_sign,
                 )
                 right_side = SideState(
                     direction=self._right_side.direction,
                     pulse_until=self._right_side.pulse_until,
                     pending_direction=self._right_side.pending_direction,
                     ready_for_flip=self._right_side.ready_for_flip,
+                    last_command_sign=self._right_side.last_command_sign,
                 )
 
             alive = (start - state.updated_at) <= HEARTBEAT_TIMEOUT_SEC
@@ -286,6 +289,7 @@ def resolve_side_output(command: float, max_dac: int, side: SideState, now: floa
         pulse_until=side.pulse_until,
         pending_direction=side.pending_direction,
         ready_for_flip=side.ready_for_flip,
+        last_command_sign=side.last_command_sign,
     )
 
     if next_side.relay_active and now >= next_side.pulse_until:
@@ -298,6 +302,16 @@ def resolve_side_output(command: float, max_dac: int, side: SideState, now: floa
         desired_direction = 1 if command > 0 else -1
     else:
         magnitude = 0.0
+
+    # Arm flips on explicit zero crossing even if the control stream
+    # jumps across zero between two samples.
+    if desired_direction != 0 and next_side.last_command_sign != 0 and desired_direction != next_side.last_command_sign:
+        next_side.ready_for_flip = True
+
+    if desired_direction != 0:
+        next_side.last_command_sign = desired_direction
+    else:
+        next_side.last_command_sign = 0
 
     if magnitude <= SIDE_DEADZONE:
         next_side.ready_for_flip = True
