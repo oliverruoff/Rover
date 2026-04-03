@@ -50,7 +50,7 @@
       gap: 16px;
       min-height: 100dvh;
       box-sizing: border-box;
-      grid-template-rows: auto auto;
+      grid-template-rows: auto minmax(0, 1fr);
     }
     .panel {
       background:
@@ -96,13 +96,159 @@
         grid-template-columns: 1fr 1fr;
         grid-template-rows: 1fr;
       }
+
+      .camera {
+        height: 100%;
+      }
+    }
+
+    @media (min-width: 900px) and (orientation: portrait) {
+      html, body {
+        overflow-y: hidden;
+      }
+
+      .wrap {
+        height: 100dvh;
+        padding: 12px 10px calc(14px + env(safe-area-inset-bottom));
+        gap: 10px;
+      }
+
+      .grid {
+        align-items: stretch;
+      }
+
+      .grid > .panel {
+        height: 100%;
+      }
+
+      .panel {
+        padding: 12px;
+      }
+
+      h1 {
+        font-size: 1.22rem;
+      }
+
+      .topbar {
+        gap: 10px;
+        margin-bottom: 4px;
+      }
+
+      .layout-btn {
+        padding: 7px 9px;
+        font-size: 0.74rem;
+      }
+
+      .status {
+        gap: 6px;
+        font-size: 0.78rem;
+        max-height: 22px;
+      }
+
+      .status-toggle {
+        padding: 1px 6px;
+        font-size: 0.6rem;
+      }
+
+      .badge {
+        padding: 4px 8px;
+      }
+
+      .collapsible {
+        padding: 5px 8px;
+        margin-bottom: 8px;
+      }
+
+      .collapsible-body {
+        margin-top: 4px;
+      }
+
+      .row {
+        gap: 6px;
+        margin: 7px 0;
+      }
+
+      label {
+        font-size: 0.8rem;
+      }
+
+      .value-pill {
+        min-width: 48px;
+        font-size: 0.76rem;
+        padding: 2px 8px;
+      }
+
+      input[type="range"] {
+        height: 28px;
+      }
+
+      .drive-zone {
+        min-height: 150px;
+        margin: 4px 0 6px;
+      }
+
+      .motor-bar-track {
+        width: 68px;
+      }
+
+      .joystick {
+        width: min(40vw, 220px);
+        height: min(40vw, 220px);
+      }
+
+      .joystick-knob {
+        width: 60px;
+        height: 60px;
+        left: calc(50% - 30px);
+        top: calc(50% - 30px);
+      }
+
+      .numbers {
+        font-size: 0.7rem;
+        padding: 7px 8px;
+        margin-top: 6px;
+      }
+
+      .btns {
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      button {
+        padding: 10px;
+        font-size: 0.82rem;
+      }
+
+      #controlPanel {
+        display: flex;
+        flex-direction: column;
+      }
+
+      #cameraPanel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+
+      .camera {
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+
+      .hint {
+        display: none;
+      }
+
+      #cameraPanel .hint {
+        display: none;
+      }
     }
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .layout-btn {
       padding: 8px 10px;
@@ -234,29 +380,57 @@
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
     }
     .numbers {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
+      display: block;
       color: var(--muted);
-      font-size: 0.84rem;
+      font-size: 0.76rem;
+      line-height: 1.35;
       font-family: "Consolas", "Courier New", monospace;
       background: #101317;
       border: 1px solid #3a424a;
       border-radius: 8px;
-      padding: 10px;
+      padding: 8px 10px;
+      margin-top: 8px;
+      overflow-wrap: anywhere;
+    }
+    .status-wrap {
+      display: grid;
+      gap: 4px;
     }
     .status {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       flex-wrap: wrap;
-      font-size: 0.88rem;
+      font-size: 0.76rem;
+      max-height: 24px;
+      overflow: hidden;
+    }
+    .status.expanded {
+      max-height: 120px;
+    }
+    .status-toggle {
+      display: none;
+      align-self: start;
+      border: 1px solid #59636e;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: linear-gradient(180deg, #3a434c, #232a31);
+      color: var(--text);
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .status-wrap.has-overflow .status-toggle {
+      display: inline-flex;
     }
     .badge {
       background: linear-gradient(180deg, #2a3138, #1a1f24);
       border: 1px solid #4f5963;
       border-radius: 999px;
-      padding: 5px 10px;
+      padding: 3px 8px;
       font-weight: 700;
+      letter-spacing: 0.03em;
+      line-height: 1.15;
     }
     .ok { color: var(--ok); }
     .warn { color: #ff8b72; }
@@ -603,13 +777,16 @@
         <h1>Rover Control</h1>
         <button class="layout-btn" id="swapLayout">Toggle Joystick Side</button>
       </div>
-      <div class="status" id="statusBadges"></div>
+      <div class="status-wrap" id="statusWrap">
+        <div class="status" id="statusBadges"></div>
+        <button class="status-toggle" id="statusToggle" type="button">More</button>
+      </div>
     </section>
 
     <section class="grid" id="mainGrid">
       <article class="panel" id="controlPanel">
         <details class="collapsible" id="sliderPanel">
-          <summary>Slider Controls</summary>
+          <summary>Fine Tuning</summary>
           <div class="collapsible-body">
             <div class="row">
               <div class="row-head">
@@ -646,6 +823,7 @@
               </div>
               <input id="joyMaxThrottle" type="range" min="0" max="100" value="55">
             </div>
+            <div class="numbers" id="numbers"></div>
           </div>
         </details>
 
@@ -671,8 +849,6 @@
             </div>
           </div>
         </div>
-
-        <div class="numbers" id="numbers"></div>
 
         <div class="btns">
           <button id="deadman">Hold To Drive</button>
@@ -711,6 +887,8 @@
     const rightMotorSpeedEl = document.getElementById("rightMotorSpeed");
     const numbersEl = document.getElementById("numbers");
     const statusEl = document.getElementById("statusBadges");
+    const statusWrapEl = document.getElementById("statusWrap");
+    const statusToggleEl = document.getElementById("statusToggle");
     const mainGridEl = document.getElementById("mainGrid");
     const swapLayoutEl = document.getElementById("swapLayout");
     const deadmanEl = document.getElementById("deadman");
@@ -811,15 +989,17 @@
       joyMinThrottleValEl.textContent = `${joyMinThrottleEl.value}%`;
       joyMaxThrottleValEl.textContent = `${joyMaxThrottleEl.value}%`;
 
-      const maxOut = Math.max(1, Math.min(255, Number(maxDacEl.value)));
-      const leftOut = Math.max(0, Math.min(maxOut, Number(state.outputLeft) || 0));
-      const rightOut = Math.max(0, Math.min(maxOut, Number(state.outputRight) || 0));
-      const leftPct = (leftOut / maxOut) * 100;
-      const rightPct = (rightOut / maxOut) * 100;
+      const maxPossibleOut = 255;
+      const leftOut = Math.max(0, Math.min(maxPossibleOut, Number(state.outputLeft) || 0));
+      const rightOut = Math.max(0, Math.min(maxPossibleOut, Number(state.outputRight) || 0));
+      const leftPct = (leftOut / maxPossibleOut) * 100;
+      const rightPct = (rightOut / maxPossibleOut) * 100;
       leftMotorSpeedEl.textContent = `${Math.round(leftPct)}%`;
       rightMotorSpeedEl.textContent = `${Math.round(rightPct)}%`;
-      const leftForward = state.leftDirection !== "reverse";
-      const rightForward = state.rightDirection !== "reverse";
+      // The status API reports motor directions by drivetrain side, while
+      // the on-screen bars are laid out from the operator's mirrored view.
+      const leftForward = state.rightDirection !== "reverse";
+      const rightForward = state.leftDirection !== "reverse";
       const leftNeutral = leftOut <= 0;
       const rightNeutral = rightOut <= 0;
 
@@ -853,23 +1033,50 @@
       numbersEl.textContent = `throttle=${throttleEl.value} steer=${steerEl.value} joy_min=${joyMinThrottleEl.value} joy_max=${joyMaxThrottleEl.value} max_dac=${maxDacEl.value} dir=${state.leftDirection}/${state.rightDirection} output=${state.outputLeft},${state.outputRight} ack=${state.ack || "-"}`;
     }
 
-    function badge(label, ok) {
+    function badge(label, ok, title = "") {
       const cls = ok ? "ok" : "warn";
-      return `<span class="badge ${cls}">${label}</span>`;
+      const titleAttr = title ? ` title="${title}"` : "";
+      return `<span class="badge ${cls}"${titleAttr}>${label}</span>`;
+    }
+
+    function updateStatusToggle() {
+      const expanded = statusEl.classList.contains("expanded");
+      statusToggleEl.textContent = expanded ? "Less" : "More";
+    }
+
+    function syncStatusOverflow() {
+      requestAnimationFrame(() => {
+        const wasExpanded = statusEl.classList.contains("expanded");
+
+        if (wasExpanded) {
+          statusEl.classList.remove("expanded");
+        }
+
+        const hasOverflow = statusEl.scrollHeight > statusEl.clientHeight + 2;
+        statusWrapEl.classList.toggle("has-overflow", hasOverflow);
+
+        if (wasExpanded && hasOverflow) {
+          statusEl.classList.add("expanded");
+        }
+
+        updateStatusToggle();
+      });
     }
 
     function renderStatus() {
-      const transportLabel = state.wsConnected ? "ws connected" : (state.usingHttpFallback ? "http fallback" : "ws offline");
+      const transportLabel = state.wsConnected ? "WS" : (state.usingHttpFallback ? "HTTP" : "WS OFF");
+      const transportTitle = state.wsConnected ? "WebSocket connected" : (state.usingHttpFallback ? "HTTP fallback active" : "WebSocket offline");
       statusEl.innerHTML = [
-        badge(transportLabel, state.wsConnected || state.usingHttpFallback),
-        badge(`serial ${state.serialConnected ? "connected" : "offline"}`, state.serialConnected),
-        badge(`esp32 app ${state.esp32AppRunning ? "running" : "not running"}`, state.esp32AppRunning),
-        badge(`left ${state.leftDirection}${state.leftRelayActive ? " flipping" : ""}`, !state.leftRelayActive),
-        badge(`right ${state.rightDirection}${state.rightRelayActive ? " flipping" : ""}`, !state.rightRelayActive),
-        badge(`mode ${state.driveMode}`, true),
-        badge(`camera ${state.cameraOk ? "ok" : "no frame"}`, state.cameraOk),
-        badge(`deadman ${state.deadman ? "held" : "released"}`, state.deadman),
+        badge(transportLabel, state.wsConnected || state.usingHttpFallback, transportTitle),
+        badge(`SER ${state.serialConnected ? "ON" : "OFF"}`, state.serialConnected, `Serial ${state.serialConnected ? "connected" : "offline"}`),
+        badge(`APP ${state.esp32AppRunning ? "ON" : "OFF"}`, state.esp32AppRunning, `ESP32 app ${state.esp32AppRunning ? "running" : "not running"}`),
+        badge(`L ${state.leftDirection === "reverse" ? "REV" : "FWD"}${state.leftRelayActive ? "*" : ""}`, !state.leftRelayActive, `Left motor ${state.leftDirection}${state.leftRelayActive ? ", flipping relay" : ""}`),
+        badge(`R ${state.rightDirection === "reverse" ? "REV" : "FWD"}${state.rightRelayActive ? "*" : ""}`, !state.rightRelayActive, `Right motor ${state.rightDirection}${state.rightRelayActive ? ", flipping relay" : ""}`),
+        badge(`MODE ${String(state.driveMode || "-").toUpperCase()}`, true, `Drive mode ${state.driveMode}`),
+        badge(`CAM ${state.cameraOk ? "OK" : "OFF"}`, state.cameraOk, `Camera ${state.cameraOk ? "stream ok" : "no frame"}`),
+        badge(`DM ${state.deadman ? "ON" : "OFF"}`, state.deadman, `Deadman ${state.deadman ? "held" : "released"}`),
       ].join(" ");
+      syncStatusOverflow();
     }
 
     async function sendControl() {
@@ -1159,6 +1366,11 @@
       localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
       applyLayoutSwap();
     });
+    statusToggleEl.addEventListener("click", () => {
+      statusEl.classList.toggle("expanded");
+      syncStatusOverflow();
+    });
+    window.addEventListener("resize", syncStatusOverflow);
 
     throttleEl.addEventListener("input", () => {
       updateNumbers();
@@ -1249,6 +1461,7 @@
     setJoystickVisual(0, 0);
     updateNumbers();
     renderStatus();
+    syncStatusOverflow();
     setInterval(sendControl, 60);
     setInterval(pollStatus, 150);
   </script>
