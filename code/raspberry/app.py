@@ -405,6 +405,24 @@ async def favicon() -> FileResponse:
     return FileResponse(icon_path, media_type="image/svg+xml")
 
 
+@app.get("/favicon.ico")
+async def favicon_ico() -> FileResponse:
+    icon_path = Path(__file__).with_name("favicon.ico")
+    return FileResponse(icon_path, media_type="image/x-icon")
+
+
+@app.get("/favicon.png")
+async def favicon_png() -> FileResponse:
+    icon_path = Path(__file__).with_name("rover_icon.png")
+    return FileResponse(icon_path, media_type="image/png")
+
+
+@app.get("/rover_icon.png")
+async def rover_icon() -> FileResponse:
+    icon_path = Path(__file__).with_name("rover_icon.png")
+    return FileResponse(icon_path, media_type="image/png")
+
+
 @app.get("/api/status")
 async def status() -> JSONResponse:
     payload = {
