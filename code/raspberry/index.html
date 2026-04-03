@@ -342,10 +342,27 @@
       background: linear-gradient(180deg, #1b2025, #101317);
       box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
       overflow: hidden;
-      display: flex;
-      align-items: flex-end;
       touch-action: none;
       cursor: ns-resize;
+    }
+    .motor-speed-label {
+      position: absolute;
+      left: 50%;
+      bottom: 4px;
+      transform: translateX(-50%);
+      min-width: 40px;
+      text-align: center;
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 0.7rem;
+      color: #111;
+      background: linear-gradient(180deg, #ffd845, #bd9206);
+      border: 1px solid #f5d358;
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-weight: 800;
+      pointer-events: none;
+      user-select: none;
+      z-index: 3;
     }
     .motor-bar-track.left {
       left: 0;
@@ -353,13 +370,33 @@
     .motor-bar-track.right {
       right: 0;
     }
+    .motor-bar-center {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.22);
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+      pointer-events: none;
+    }
     .motor-bar-fill {
+      position: absolute;
+      left: 0;
       width: 100%;
       height: 0%;
+      pointer-events: none;
+      transition: height 0.08s linear;
+    }
+    .motor-bar-fill.forward {
+      bottom: 50%;
       background: linear-gradient(180deg, #ffe067, #f1c40f 55%, #c99900);
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
-      transition: height 0.08s linear;
-      pointer-events: none;
+    }
+    .motor-bar-fill.reverse {
+      top: 50%;
+      background: linear-gradient(180deg, #ff8168, #df5138 55%, #9f2718);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
     }
     .joystick {
       width: min(62vw, 280px);
@@ -605,19 +642,25 @@
             <div class="row">
               <div class="row-head">
                 <label for="joyMaxThrottle">Joystick max throttle (%)</label>
-                <span class="value-pill" id="joyMaxThrottleVal">70%</span>
+                <span class="value-pill" id="joyMaxThrottleVal">55%</span>
               </div>
-              <input id="joyMaxThrottle" type="range" min="0" max="100" value="70">
+              <input id="joyMaxThrottle" type="range" min="0" max="100" value="55">
             </div>
           </div>
         </details>
 
         <div class="drive-zone">
           <div class="motor-bar-track left" id="leftMotorTrack">
-            <div class="motor-bar-fill" id="leftMotorBar"></div>
+            <div class="motor-bar-center"></div>
+            <div class="motor-bar-fill forward" id="leftMotorBarFwd"></div>
+            <div class="motor-bar-fill reverse" id="leftMotorBarRev"></div>
+            <span class="motor-speed-label" id="leftMotorSpeed">0%</span>
           </div>
           <div class="motor-bar-track right" id="rightMotorTrack">
-            <div class="motor-bar-fill" id="rightMotorBar"></div>
+            <div class="motor-bar-center"></div>
+            <div class="motor-bar-fill forward" id="rightMotorBarFwd"></div>
+            <div class="motor-bar-fill reverse" id="rightMotorBarRev"></div>
+            <span class="motor-speed-label" id="rightMotorSpeed">0%</span>
           </div>
           <div class="joystick-wrap">
             <div class="joystick" id="joystick" aria-label="Drive joystick" role="application">
@@ -660,8 +703,12 @@
     const joyMaxThrottleValEl = document.getElementById("joyMaxThrottleVal");
     const leftMotorTrackEl = document.getElementById("leftMotorTrack");
     const rightMotorTrackEl = document.getElementById("rightMotorTrack");
-    const leftMotorBarEl = document.getElementById("leftMotorBar");
-    const rightMotorBarEl = document.getElementById("rightMotorBar");
+    const leftMotorBarFwdEl = document.getElementById("leftMotorBarFwd");
+    const leftMotorBarRevEl = document.getElementById("leftMotorBarRev");
+    const rightMotorBarFwdEl = document.getElementById("rightMotorBarFwd");
+    const rightMotorBarRevEl = document.getElementById("rightMotorBarRev");
+    const leftMotorSpeedEl = document.getElementById("leftMotorSpeed");
+    const rightMotorSpeedEl = document.getElementById("rightMotorSpeed");
     const numbersEl = document.getElementById("numbers");
     const statusEl = document.getElementById("statusBadges");
     const mainGridEl = document.getElementById("mainGrid");
@@ -764,13 +811,41 @@
       joyMinThrottleValEl.textContent = `${joyMinThrottleEl.value}%`;
       joyMaxThrottleValEl.textContent = `${joyMaxThrottleEl.value}%`;
 
-      const maxOut = Math.max(0, Math.min(255, Number(maxDacEl.value)));
+      const maxOut = Math.max(1, Math.min(255, Number(maxDacEl.value)));
       const leftOut = Math.max(0, Math.min(maxOut, Number(state.outputLeft) || 0));
       const rightOut = Math.max(0, Math.min(maxOut, Number(state.outputRight) || 0));
-      const leftPct = maxOut > 0 ? (leftOut / maxOut) * 100 : 0;
-      const rightPct = maxOut > 0 ? (rightOut / maxOut) * 100 : 0;
-      leftMotorBarEl.style.height = `${leftPct}%`;
-      rightMotorBarEl.style.height = `${rightPct}%`;
+      const leftPct = (leftOut / maxOut) * 100;
+      const rightPct = (rightOut / maxOut) * 100;
+      leftMotorSpeedEl.textContent = `${Math.round(leftPct)}%`;
+      rightMotorSpeedEl.textContent = `${Math.round(rightPct)}%`;
+      const leftForward = state.leftDirection !== "reverse";
+      const rightForward = state.rightDirection !== "reverse";
+      const leftNeutral = leftOut <= 0;
+      const rightNeutral = rightOut <= 0;
+
+      if (leftNeutral) {
+        leftMotorBarFwdEl.style.height = "0%";
+        leftMotorBarRevEl.style.height = "0%";
+      } else if (leftForward) {
+        leftMotorBarFwdEl.style.height = "0%";
+        leftMotorBarRevEl.style.height = "0%";
+        leftMotorBarFwdEl.style.height = `${leftPct}%`;
+      } else {
+        leftMotorBarFwdEl.style.height = "0%";
+        leftMotorBarRevEl.style.height = `${leftPct}%`;
+      }
+
+      if (rightNeutral) {
+        rightMotorBarFwdEl.style.height = "0%";
+        rightMotorBarRevEl.style.height = "0%";
+      } else if (rightForward) {
+        rightMotorBarFwdEl.style.height = "0%";
+        rightMotorBarRevEl.style.height = "0%";
+        rightMotorBarFwdEl.style.height = `${rightPct}%`;
+      } else {
+        rightMotorBarFwdEl.style.height = "0%";
+        rightMotorBarRevEl.style.height = `${rightPct}%`;
+      }
     }
 
     function updateNumbers() {
@@ -895,15 +970,23 @@
       state.barModeActive = false;
       const throttleRaw = Math.max(-1, Math.min(1, -normY));
       const throttleMag = Math.abs(throttleRaw);
+      const maxJoyPercent = Math.max(0, Math.min(100, Number(joyMaxThrottleEl.value)));
+      const pivotScale = maxJoyPercent / 100;
       const throttle = throttleMag <= JOY_PIVOT_BAND
         ? 0
         : Math.round(Math.sign(throttleRaw) * joystickThrottlePercent((throttleMag - JOY_PIVOT_BAND) / (1 - JOY_PIVOT_BAND)));
 
       const steerRaw = Math.max(-1, Math.min(1, normX));
       const steerMag = Math.abs(steerRaw);
-      const steer = steerMag <= JOY_STEER_DEADZONE
+      let steer = steerMag <= JOY_STEER_DEADZONE
         ? 0
         : Math.round((Math.sign(steerRaw) * (steerMag - JOY_STEER_DEADZONE) / (1 - JOY_STEER_DEADZONE)) * 100);
+
+      // In pivot zone, cap turn command by joystick max throttle so
+      // max speed settings are respected there too.
+      if (throttleMag <= JOY_PIVOT_BAND) {
+        steer = Math.round(steer * pivotScale);
+      }
 
       steerEl.value = String(Math.max(-100, Math.min(100, steer)));
       throttleEl.value = String(Math.max(-100, Math.min(100, throttle)));

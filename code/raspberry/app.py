@@ -275,12 +275,18 @@ def mix_signed_drive(throttle: float, steer: float) -> tuple[float, float, str]:
         right = s
         mode = "pivot"
     else:
-        left = t + s * abs(t)
-        right = t - s * abs(t)
+        # Curvature steering without speed boost:
+        # outer side keeps |t|, inner side is reduced by steer amount.
+        left = t
+        right = t
+        turn = abs(s)
+        if s > 0:
+            right = t * (1.0 - turn)
+        elif s < 0:
+            left = t * (1.0 - turn)
         mode = "forward" if t > 0 else "reverse"
 
-    peak = max(1.0, abs(left), abs(right))
-    return left / peak, right / peak, mode
+    return left, right, mode
 
 
 def resolve_side_output(command: float, max_dac: int, side: SideState, now: float) -> tuple[int, SideState]:
