@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from camera import UsbCamera
-from relay_controller import DirectionRelayController
+from relay_controller import AuxOutputController, DirectionRelayController
 from serial_bridge import Esp32SerialBridge
 
 
@@ -26,6 +26,10 @@ STEER_DEADZONE = max(0.0, float(os.getenv("ROVER_STEER_DEADZONE", "0.08")))
 RELAY_TRIGGER_THRESHOLD = max(SIDE_DEADZONE, float(os.getenv("ROVER_RELAY_TRIGGER_THRESHOLD", "0.15")))
 LEFT_RELAY_PIN = int(os.getenv("ROVER_LEFT_RELAY_PIN", "26"))
 RIGHT_RELAY_PIN = int(os.getenv("ROVER_RIGHT_RELAY_PIN", "19"))
+FRONT_LIGHT_PIN = int(os.getenv("ROVER_FRONT_LIGHT_PIN", "21"))
+BACK_LIGHT_PIN = int(os.getenv("ROVER_BACK_LIGHT_PIN", "16"))
+DUMPER_UP_PIN = int(os.getenv("ROVER_DUMPER_UP_PIN", "13"))
+DUMPER_DOWN_PIN = int(os.getenv("ROVER_DUMPER_DOWN_PIN", "5"))
 
 
 @dataclass
@@ -356,6 +360,13 @@ CAMERA_JPEG_QUALITY = int(os.getenv("ROVER_CAMERA_JPEG_QUALITY", "50"))
 
 bridge = Esp32SerialBridge(port=SERIAL_PORT, baudrate=SERIAL_BAUD)
 relays = DirectionRelayController(left_pin=LEFT_RELAY_PIN, right_pin=RIGHT_RELAY_PIN, active_high=True)
+aux = AuxOutputController(
+    front_light_pin=FRONT_LIGHT_PIN,
+    back_light_pin=BACK_LIGHT_PIN,
+    dumper_up_pin=DUMPER_UP_PIN,
+    dumper_down_pin=DUMPER_DOWN_PIN,
+    active_high=True,
+)
 controller = RoverController(bridge, relays)
 camera = UsbCamera(
     index=CAMERA_INDEX,
@@ -378,6 +389,7 @@ async def lifespan(_: FastAPI):
     finally:
         controller.stop()
         relays.close()
+        aux.close()
         bridge.stop()
         camera.stop()
 
@@ -393,6 +405,16 @@ class ControlMessage(BaseModel):
     deadman: bool = False
     max_dac: Optional[int] = None
     client_id: Optional[str] = None
+
+
+class AuxSetMessage(BaseModel):
+    active: bool
+
+
+class AuxToggleMessage(BaseModel):
+    active: Optional[bool] = None
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index() -> str:
     html_path = Path(__file__).with_name("index.html")
@@ -435,6 +457,7 @@ async def status() -> JSONResponse:
         },
         "serial": bridge.status(),
         "control": controller.snapshot(),
+        "aux": aux.snapshot(),
         "camera": camera.status(),
     }
     return JSONResponse(payload)
@@ -452,6 +475,37 @@ async def flip_side(side: str) -> JSONResponse:
         raise HTTPException(status_code=400, detail="side must be 'left' or 'right'")
     applied = controller.manual_flip(side)
     return JSONResponse({"ok": True, "applied": applied, "control": controller.snapshot()})
+
+
+@app.post("/api/aux/light/{light}")
+async def set_light(light: str, msg: Optional[AuxToggleMessage] = Body(default=None)) -> JSONResponse:
+    if light not in {"front", "back"}:
+        raise HTTPException(status_code=400, detail="light must be 'front' or 'back'")
+
+    snapshot = aux.snapshot()
+    current = bool(snapshot["lights"][light])
+    requested_active = None if msg is None else msg.active
+    next_active = (not current) if requested_active is None else bool(requested_active)
+
+    if light == "front":
+        aux.set_front_light(next_active)
+    else:
+        aux.set_back_light(next_active)
+
+    return JSONResponse({"ok": True, "aux": aux.snapshot()})
+
+
+@app.post("/api/aux/dumper/{direction}")
+async def set_dumper(direction: str, msg: AuxSetMessage) -> JSONResponse:
+    if direction not in {"up", "down"}:
+        raise HTTPException(status_code=400, detail="direction must be 'up' or 'down'")
+
+    if direction == "up":
+        aux.set_dumper_up(msg.active)
+    else:
+        aux.set_dumper_down(msg.active)
+
+    return JSONResponse({"ok": True, "aux": aux.snapshot()})
 
 
 @app.post("/api/control")

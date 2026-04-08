@@ -79,30 +79,44 @@
       display: grid;
       gap: 10px;
       grid-template-columns: 1fr;
-      grid-template-rows: auto auto;
-      min-height: 0;
-      overflow: visible;
-      align-items: start;
-    }
+       grid-template-rows: auto auto auto;
+       grid-template-areas:
+         "camera"
+         "aux"
+         "control";
+       min-height: 0;
+       overflow: visible;
+       align-items: start;
+       align-content: start;
+      }
     .grid > .panel {
       min-height: 0;
       height: auto;
     }
-    .grid.swap-sides #controlPanel {
-      order: 2;
-    }
-    .grid.swap-sides #cameraPanel {
-      order: 1;
-    }
-    @media (min-width: 900px) {
-      .grid {
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr;
-      }
+     .grid.swap-sides #controlPanel {
+       grid-area: camera;
+     }
+     .grid.swap-sides #cameraPanel {
+       grid-area: control;
+     }
+     @media (min-width: 900px) {
+       .grid {
+         grid-template-columns: 1fr 1fr;
+         grid-template-rows: 1fr auto;
+         grid-template-areas:
+           "control camera"
+           "aux aux";
+       }
 
-      .camera {
-        height: 100%;
-      }
+       .grid.swap-sides {
+         grid-template-areas:
+           "camera control"
+           "aux aux";
+       }
+
+       .camera {
+         height: 100%;
+       }
     }
 
     @media (min-width: 900px) and (orientation: portrait) {
@@ -160,6 +174,15 @@
       .collapsible {
         padding: 5px 8px;
         margin-bottom: 8px;
+      }
+
+      .collapsible:not([open]) {
+        padding: 2px 8px;
+        margin-bottom: 1px;
+      }
+
+      #sliderPanel:not([open]) + .drive-zone {
+        margin-top: 0;
       }
 
       .collapsible-body {
@@ -256,17 +279,28 @@
     .layout-btn {
       padding: 8px 10px;
       font-size: 0.8rem;
-      background: linear-gradient(180deg, #ffd845, #bd9206);
-      color: #1a1a1a;
-      border: 1px solid #f5d358;
+      background: transparent;
+      color: var(--cat-yellow);
+      border: 0;
+      box-shadow: none;
       white-space: nowrap;
     }
     .collapsible {
-      border: 1px solid #4e5963;
+      border: 0;
       border-radius: 8px;
       padding: 6px 8px;
       margin-bottom: 10px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.12));
+      background: transparent;
+    }
+    .collapsible:not([open]) {
+      padding: 2px 8px;
+      margin-bottom: 2px;
+    }
+    #sliderPanel:not([open]) {
+      margin-bottom: 0;
+    }
+    #sliderPanel:not([open]) + .drive-zone {
+      margin-top: 0;
     }
     .collapsible > summary {
       cursor: pointer;
@@ -413,10 +447,10 @@
     .status-toggle {
       display: none;
       align-self: start;
-      border: 1px solid #59636e;
+      border: 0;
       border-radius: 999px;
       padding: 2px 8px;
-      background: linear-gradient(180deg, #3a434c, #232a31);
+      background: transparent;
       color: var(--text);
       font-size: 0.68rem;
       font-weight: 700;
@@ -442,6 +476,9 @@
       grid-template-columns: 1fr 1fr;
       gap: 10px;
       margin-top: 8px;
+    }
+    #controlPanel {
+      grid-area: control;
     }
     button {
       border: 1px solid #59636e;
@@ -475,6 +512,69 @@
       color: #f4f6f8;
       border: 1px solid #7a8792;
     }
+    #auxPanel {
+      grid-area: aux;
+      padding: 8px 10px;
+    }
+    .aux-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .aux-btn {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-width: 0;
+      min-height: 64px;
+      padding: 10px 6px;
+      background: linear-gradient(180deg, #56616c, #303840);
+      color: #e6ebf0;
+      border: 1px solid #7a8792;
+    }
+    .aux-btn svg {
+      width: 30px;
+      height: 30px;
+      display: block;
+      pointer-events: none;
+    }
+    .aux-btn .aux-indicator {
+      position: absolute;
+      right: 8px;
+      bottom: 8px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #49525b;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+      pointer-events: none;
+    }
+    .aux-btn.is-on {
+      color: #171717;
+      border-color: #f5d358;
+      box-shadow: 0 0 0 1px rgba(241, 196, 15, 0.25), 0 0 18px rgba(241, 196, 15, 0.18);
+    }
+    .aux-btn.light-front.is-on {
+      background: linear-gradient(180deg, #ffe067, #d8a907);
+    }
+    .aux-btn.light-back.is-on {
+      background: linear-gradient(180deg, #ff9b88, #c74029);
+      color: #fff;
+      border-color: #f07a64;
+      box-shadow: 0 0 0 1px rgba(223, 81, 56, 0.25), 0 0 18px rgba(223, 81, 56, 0.18);
+    }
+    .aux-btn.is-on .aux-indicator {
+      background: currentColor;
+    }
+    .aux-btn.light-back.is-on .aux-indicator {
+      background: #fff;
+    }
+    .aux-btn.is-active {
+      background: linear-gradient(180deg, #ffd845, #bd9206);
+      color: #171717;
+      border-color: #f5d358;
+    }
     .camera {
       width: 100%;
       border-radius: 8px;
@@ -486,6 +586,7 @@
       box-shadow: inset 0 0 0 1px #101317;
     }
     #cameraPanel {
+      grid-area: camera;
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -495,7 +596,7 @@
       font-size: 0.87rem;
     }
     .joystick-wrap {
-      margin: 8px 0;
+      margin: 6px 0;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -696,6 +797,17 @@
       .btns {
         gap: 6px;
       }
+      .aux-strip {
+        gap: 6px;
+      }
+      .aux-btn {
+        min-height: 56px;
+        padding: 8px 4px;
+      }
+      .aux-btn svg {
+        width: 24px;
+        height: 24px;
+      }
       button {
         font-size: 0.74rem;
         padding: 8px;
@@ -705,6 +817,168 @@
       }
       .hint {
         display: none;
+      }
+    }
+    @media (max-width: 680px) and (orientation: portrait) {
+      html, body {
+        overflow-y: hidden;
+      }
+
+      .wrap {
+        height: 100dvh;
+        padding: 8px 8px calc(10px + env(safe-area-inset-bottom));
+        gap: 6px;
+        overflow-y: auto;
+      }
+
+      .grid {
+        gap: 4px;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        align-content: start;
+        min-height: 100%;
+      }
+
+      .panel {
+        padding: 6px 8px;
+      }
+
+      .topbar {
+        margin-bottom: 2px;
+      }
+
+      h1 {
+        font-size: 0.96rem;
+      }
+
+      .status {
+        max-height: 20px;
+        gap: 4px;
+        font-size: 0.68rem;
+      }
+
+      .badge {
+        padding: 3px 6px;
+      }
+
+      #cameraPanel {
+        padding: 6px 8px;
+      }
+
+      .camera {
+        max-height: 24dvh;
+        min-height: 112px;
+        object-fit: cover;
+      }
+
+      #controlPanel {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        height: 100%;
+      }
+
+      #auxPanel {
+        padding: 4px 8px;
+      }
+
+      .aux-strip {
+        gap: 6px;
+      }
+
+      .aux-btn {
+        min-height: 46px;
+        padding: 6px 4px;
+      }
+
+      .aux-btn svg {
+        width: 22px;
+        height: 22px;
+      }
+
+      .aux-btn .aux-indicator {
+        right: 6px;
+        bottom: 6px;
+        width: 8px;
+        height: 8px;
+      }
+
+      .collapsible {
+        margin-bottom: 4px;
+      }
+
+      .collapsible:not([open]) {
+        padding: 1px 8px;
+        margin-bottom: 0;
+      }
+
+      #sliderPanel:not([open]) + .drive-zone {
+        margin-top: 0;
+      }
+
+      .collapsible-body {
+        margin-top: 2px;
+      }
+
+      .row {
+        gap: 3px;
+        margin: 4px 0;
+      }
+
+      label {
+        font-size: 0.7rem;
+      }
+
+      .value-pill {
+        min-width: 42px;
+        font-size: 0.68rem;
+        padding: 2px 7px;
+      }
+
+      input[type="range"] {
+        height: 22px;
+      }
+
+      .drive-zone {
+        flex: 1 1 auto;
+        min-height: 180px;
+        margin: 0 0 2px;
+      }
+
+      .motor-bar-track {
+        width: 50px;
+      }
+
+      .motor-speed-label {
+        font-size: 0.62rem;
+        min-width: 34px;
+      }
+
+      .joystick {
+        width: min(54vw, 220px);
+        height: min(54vw, 220px);
+        max-width: 100%;
+        max-height: 100%;
+      }
+
+      .joystick-knob {
+        width: 42px;
+        height: 42px;
+        left: calc(50% - 21px);
+        top: calc(50% - 21px);
+      }
+
+      .numbers {
+        display: none;
+      }
+
+      .btns {
+        gap: 6px;
+        margin-top: 2px;
+      }
+
+      button {
+        font-size: 0.7rem;
+        padding: 7px;
       }
     }
     @media (max-height: 540px) and (orientation: landscape) {
@@ -753,6 +1027,9 @@
       .btns {
         gap: 6px;
       }
+      .aux-btn {
+        min-height: 52px;
+      }
       button {
         font-size: 0.72rem;
         padding: 7px;
@@ -787,6 +1064,50 @@
     </section>
 
     <section class="grid" id="mainGrid">
+      <article class="panel" id="cameraPanel">
+        <img class="camera" id="camera" src="/api/camera.mjpg" alt="USB camera stream">
+        <p class="hint">Live USB camera stream from Raspberry Pi.</p>
+      </article>
+
+      <article class="panel" id="auxPanel">
+        <div class="aux-strip">
+          <button class="aux-btn light-front" id="frontLight" type="button" aria-label="Toggle front lights" title="Front lights">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M7 7c2.8 0 5 2.2 5 5v5H7z" fill="currentColor" stroke="none"></path>
+              <path d="M14 8l5-2"></path>
+              <path d="M14 12h6"></path>
+              <path d="M14 16l5 2"></path>
+            </svg>
+            <span class="aux-indicator" aria-hidden="true"></span>
+          </button>
+          <button class="aux-btn light-back" id="backLight" type="button" aria-label="Toggle back lights" title="Back lights">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M17 7c-2.8 0-5 2.2-5 5v5h5z" fill="currentColor" stroke="none"></path>
+              <path d="M10 8L5 6"></path>
+              <path d="M10 12H4"></path>
+              <path d="M10 16l-5 2"></path>
+            </svg>
+            <span class="aux-indicator" aria-hidden="true"></span>
+          </button>
+          <button class="aux-btn" id="dumperUp" type="button" aria-label="Lift dumper" title="Lift dumper">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 18h16"></path>
+              <path d="M6 16h8l3-5H9z"></path>
+              <path d="M12 5v6"></path>
+              <path d="M9.5 7.5L12 5l2.5 2.5"></path>
+            </svg>
+          </button>
+          <button class="aux-btn" id="dumperDown" type="button" aria-label="Lower dumper" title="Lower dumper">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 18h16"></path>
+              <path d="M6 16h8l3-5H9z"></path>
+              <path d="M12 7v6"></path>
+              <path d="M9.5 10.5L12 13l2.5-2.5"></path>
+            </svg>
+          </button>
+        </div>
+      </article>
+
       <article class="panel" id="controlPanel">
         <details class="collapsible" id="sliderPanel">
           <summary>Fine Tuning</summary>
@@ -861,11 +1182,6 @@
         </div>
         <p class="hint">Keyboard: hold Arrow keys (or W/A/S/D) to drive forward/reverse, Space stop. Releasing keys sends 0,0.</p>
       </article>
-
-      <article class="panel" id="cameraPanel">
-        <img class="camera" id="camera" src="/api/camera.mjpg" alt="USB camera stream">
-        <p class="hint">Live USB camera stream from Raspberry Pi.</p>
-      </article>
     </section>
   </main>
 
@@ -894,6 +1210,10 @@
     const statusToggleEl = document.getElementById("statusToggle");
     const mainGridEl = document.getElementById("mainGrid");
     const swapLayoutEl = document.getElementById("swapLayout");
+    const frontLightEl = document.getElementById("frontLight");
+    const backLightEl = document.getElementById("backLight");
+    const dumperUpEl = document.getElementById("dumperUp");
+    const dumperDownEl = document.getElementById("dumperDown");
     const deadmanEl = document.getElementById("deadman");
     const estopEl = document.getElementById("estop");
     const flipLeftEl = document.getElementById("flipLeft");
@@ -934,6 +1254,10 @@
       barPointerId: null,
       barLeftPct: 0,
       barRightPct: 0,
+      frontLightOn: false,
+      backLightOn: false,
+      dumperUpActive: false,
+      dumperDownActive: false,
     };
 
     const keyState = {
@@ -970,6 +1294,22 @@
     function applyLayoutSwap() {
       mainGridEl.classList.toggle("swap-sides", state.swapSides);
       swapLayoutEl.textContent = "Toggle Joystick Side";
+    }
+
+    function applyAuxSnapshot(auxData) {
+      state.frontLightOn = Boolean(auxData?.lights?.front);
+      state.backLightOn = Boolean(auxData?.lights?.back);
+      state.dumperUpActive = Boolean(auxData?.dumper?.up);
+      state.dumperDownActive = Boolean(auxData?.dumper?.down);
+    }
+
+    function renderAuxControls() {
+      frontLightEl.classList.toggle("is-on", state.frontLightOn);
+      backLightEl.classList.toggle("is-on", state.backLightOn);
+      dumperUpEl.classList.toggle("is-active", state.dumperUpActive);
+      dumperDownEl.classList.toggle("is-active", state.dumperDownActive);
+      frontLightEl.setAttribute("aria-pressed", state.frontLightOn ? "true" : "false");
+      backLightEl.setAttribute("aria-pressed", state.backLightOn ? "true" : "false");
     }
 
     function joystickThrottlePercent(forwardAmount) {
@@ -1079,7 +1419,78 @@
         badge(`CAM ${state.cameraOk ? "OK" : "OFF"}`, state.cameraOk, `Camera ${state.cameraOk ? "stream ok" : "no frame"}`),
         badge(`DM ${state.deadman ? "ON" : "OFF"}`, state.deadman, `Deadman ${state.deadman ? "held" : "released"}`),
       ].join(" ");
+      renderAuxControls();
       syncStatusOverflow();
+    }
+
+    async function toggleLight(light) {
+      const prevFront = state.frontLightOn;
+      const prevBack = state.backLightOn;
+      const nextActive = light === "front" ? !state.frontLightOn : !state.backLightOn;
+
+      if (light === "front") {
+        state.frontLightOn = nextActive;
+      } else {
+        state.backLightOn = nextActive;
+      }
+
+      renderAuxControls();
+
+      try {
+        const res = await fetch(`/api/aux/light/${light}`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          throw new Error(`light toggle failed: ${res.status}`);
+        }
+        const data = await res.json();
+        applyAuxSnapshot(data?.aux);
+        renderStatus();
+      } catch (_) {
+        state.frontLightOn = prevFront;
+        state.backLightOn = prevBack;
+        renderAuxControls();
+        pollStatus();
+      }
+    }
+
+    async function setDumper(direction, active) {
+      if (direction === "up") {
+        if (state.dumperUpActive === active && (!active || !state.dumperDownActive)) return;
+        state.dumperUpActive = active;
+        if (active) state.dumperDownActive = false;
+      } else {
+        if (state.dumperDownActive === active && (!active || !state.dumperUpActive)) return;
+        state.dumperDownActive = active;
+        if (active) state.dumperUpActive = false;
+      }
+
+      renderAuxControls();
+
+      try {
+        const res = await fetch(`/api/aux/dumper/${direction}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ active }),
+        });
+        if (!res.ok) {
+          throw new Error(`dumper request failed: ${res.status}`);
+        }
+        const data = await res.json();
+        applyAuxSnapshot(data?.aux);
+        renderAuxControls();
+      } catch (_) {
+        pollStatus();
+      }
+    }
+
+    function releaseDumperControls() {
+      if (state.dumperUpActive) {
+        setDumper("up", false);
+      }
+      if (state.dumperDownActive) {
+        setDumper("down", false);
+      }
     }
 
     async function sendControl() {
@@ -1143,6 +1554,7 @@
         state.driveMode = data?.control?.drive_mode || "idle";
         state.outputLeft = data?.control?.output?.left ?? 0;
         state.outputRight = data?.control?.output?.right ?? 0;
+        applyAuxSnapshot(data?.aux);
       } catch (_) {
         state.serialConnected = false;
         state.esp32AppRunning = false;
@@ -1157,6 +1569,7 @@
       state.barModeActive = false;
       throttleEl.value = "0";
       steerEl.value = "0";
+      releaseDumperControls();
       renderStatus();
       updateNumbers();
       sendControl();
@@ -1242,6 +1655,33 @@
         await pollStatus();
       } catch (_) {
       }
+    }
+
+    function bindHoldAction(buttonEl, direction) {
+      let pointerId = null;
+
+      buttonEl.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        pointerId = e.pointerId;
+        buttonEl.setPointerCapture(e.pointerId);
+        setDumper(direction, true);
+      });
+
+      function release(e) {
+        if (pointerId === null) return;
+        if (e && e.pointerId !== undefined && e.pointerId !== pointerId) return;
+        pointerId = null;
+        setDumper(direction, false);
+      }
+
+      buttonEl.addEventListener("pointerup", release);
+      buttonEl.addEventListener("pointercancel", release);
+      buttonEl.addEventListener("lostpointercapture", release);
+      buttonEl.addEventListener("pointerleave", (e) => {
+        if ((e.buttons || 0) === 0) {
+          release(e);
+        }
+      });
     }
 
     function startBarDrive(trackEl, side, evt) {
@@ -1362,8 +1802,12 @@
     }
 
     estopEl.addEventListener("click", emergencyStop);
+    frontLightEl.addEventListener("click", () => toggleLight("front"));
+    backLightEl.addEventListener("click", () => toggleLight("back"));
     flipLeftEl.addEventListener("click", () => flipSide("right"));
     flipRightEl.addEventListener("click", () => flipSide("left"));
+    bindHoldAction(dumperUpEl, "up");
+    bindHoldAction(dumperDownEl, "down");
     swapLayoutEl.addEventListener("click", () => {
       state.swapSides = !state.swapSides;
       localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
@@ -1440,6 +1884,7 @@
     });
 
     window.addEventListener("blur", () => {
+      releaseDumperControls();
       keyState.up = false;
       keyState.down = false;
       keyState.left = false;
@@ -1449,11 +1894,13 @@
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
+        releaseDumperControls();
         emergencyStop();
       }
     });
 
     window.addEventListener("beforeunload", () => {
+      releaseDumperControls();
       if (navigator.sendBeacon) {
         navigator.sendBeacon("/api/stop", "");
       }
