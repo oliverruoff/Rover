@@ -353,10 +353,10 @@ SERIAL_BAUD = int(os.getenv("ROVER_BAUD", "115200"))
 CAMERA_INDEX = int(os.getenv("ROVER_CAMERA_INDEX", "0"))
 CAMERA_WIDTH = int(os.getenv("ROVER_CAMERA_WIDTH", "640"))
 CAMERA_HEIGHT = int(os.getenv("ROVER_CAMERA_HEIGHT", "480"))
-CAMERA_FPS = int(os.getenv("ROVER_CAMERA_FPS", "20"))
-CAMERA_STREAM_WIDTH = int(os.getenv("ROVER_CAMERA_STREAM_WIDTH", "480"))
-CAMERA_STREAM_HEIGHT = int(os.getenv("ROVER_CAMERA_STREAM_HEIGHT", "360"))
-CAMERA_JPEG_QUALITY = int(os.getenv("ROVER_CAMERA_JPEG_QUALITY", "50"))
+CAMERA_FPS = int(os.getenv("ROVER_CAMERA_FPS", "10"))
+CAMERA_STREAM_WIDTH = int(os.getenv("ROVER_CAMERA_STREAM_WIDTH", "320"))
+CAMERA_STREAM_HEIGHT = int(os.getenv("ROVER_CAMERA_STREAM_HEIGHT", "240"))
+CAMERA_JPEG_QUALITY = int(os.getenv("ROVER_CAMERA_JPEG_QUALITY", "40"))
 
 bridge = Esp32SerialBridge(port=SERIAL_PORT, baudrate=SERIAL_BAUD)
 relays = DirectionRelayController(left_pin=LEFT_RELAY_PIN, right_pin=RIGHT_RELAY_PIN, active_high=True)
@@ -549,7 +549,7 @@ async def ws_control(websocket: WebSocket) -> None:
             client_id = str(msg.get("client_id", "anon"))[:64]
             source_id = f"{ws_source_base}:{client_id}"
             last_source_id = source_id
-            applied = controller.update_input(
+            controller.update_input(
                 throttle=throttle,
                 steer=steer,
                 deadman=deadman,
@@ -558,6 +558,5 @@ async def ws_control(websocket: WebSocket) -> None:
                 max_dac=max_dac,
                 source_id=source_id,
             )
-            await websocket.send_json({"ok": True, "applied": applied})
     except WebSocketDisconnect:
         controller.update_input(throttle=0.0, steer=0.0, deadman=False, source_id=last_source_id)

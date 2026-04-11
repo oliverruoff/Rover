@@ -1065,8 +1065,12 @@
 
     <section class="grid" id="mainGrid">
       <article class="panel" id="cameraPanel">
+        <div class="topbar">
+          <h2>Camera</h2>
+          <button class="layout-btn" id="cameraToggle" type="button" aria-pressed="true">Pause Camera</button>
+        </div>
         <img class="camera" id="camera" src="/api/camera.mjpg" alt="USB camera stream">
-        <p class="hint">Live USB camera stream from Raspberry Pi.</p>
+        <p class="hint" id="cameraHint">Live USB camera stream from Raspberry Pi.</p>
       </article>
 
       <article class="panel" id="auxPanel">
@@ -1220,6 +1224,9 @@
     const flipRightEl = document.getElementById("flipRight");
     const joystickEl = document.getElementById("joystick");
     const joystickKnobEl = document.getElementById("joystickKnob");
+    const cameraEl = document.getElementById("camera");
+    const cameraHintEl = document.getElementById("cameraHint");
+    const cameraToggleEl = document.getElementById("cameraToggle");
 
     function getClientId() {
       const key = "roverClientId";
@@ -1230,12 +1237,18 @@
       return created;
     }
 
+    const CONTROL_SEND_INTERVAL_MS = 80;
+    const STATUS_POLL_INTERVAL_MS = 500;
+    const WS_BUFFER_LIMIT_BYTES = 4096;
+    const CAMERA_SRC = "/api/camera.mjpg";
+
     const state = {
       deadman: false,
       ws: null,
       wsConnected: false,
       usingHttpFallback: false,
       swapSides: localStorage.getItem("roverSwapSides") === "1",
+      cameraEnabled: localStorage.getItem("roverCameraEnabled") !== "0",
       clientId: getClientId(),
       serialConnected: false,
       esp32AppRunning: false,
@@ -1249,6 +1262,8 @@
       outputLeft: 0,
       outputRight: 0,
       lastHttpSendMs: 0,
+      lastSentPayload: "",
+      pendingControlSend: false,
       barDragging: false,
       barModeActive: false,
       barPointerId: null,
@@ -1409,6 +1424,9 @@
     function renderStatus() {
       const transportLabel = state.wsConnected ? "WS" : (state.usingHttpFallback ? "HTTP" : "WS OFF");
       const transportTitle = state.wsConnected ? "WebSocket connected" : (state.usingHttpFallback ? "HTTP fallback active" : "WebSocket offline");
+      const cameraTitle = !state.cameraEnabled
+        ? "Camera stream paused in browser"
+        : (state.cameraOk ? "Camera stream ok" : "Camera on but no fresh frame");
       statusEl.innerHTML = [
         badge(transportLabel, state.wsConnected || state.usingHttpFallback, transportTitle),
         badge(`SER ${state.serialConnected ? "ON" : "OFF"}`, state.serialConnected, `Serial ${state.serialConnected ? "connected" : "offline"}`),
@@ -1416,9 +1434,14 @@
         badge(`L ${state.leftDirection === "reverse" ? "REV" : "FWD"}${state.leftRelayActive ? "*" : ""}`, !state.leftRelayActive, `Left motor ${state.leftDirection}${state.leftRelayActive ? ", flipping relay" : ""}`),
         badge(`R ${state.rightDirection === "reverse" ? "REV" : "FWD"}${state.rightRelayActive ? "*" : ""}`, !state.rightRelayActive, `Right motor ${state.rightDirection}${state.rightRelayActive ? ", flipping relay" : ""}`),
         badge(`MODE ${String(state.driveMode || "-").toUpperCase()}`, true, `Drive mode ${state.driveMode}`),
-        badge(`CAM ${state.cameraOk ? "OK" : "OFF"}`, state.cameraOk, `Camera ${state.cameraOk ? "stream ok" : "no frame"}`),
+        badge(`CAM ${state.cameraEnabled ? (state.cameraOk ? "OK" : "WAIT") : "PAUSE"}`, state.cameraEnabled ? state.cameraOk : true, cameraTitle),
         badge(`DM ${state.deadman ? "ON" : "OFF"}`, state.deadman, `Deadman ${state.deadman ? "held" : "released"}`),
       ].join(" ");
+      cameraToggleEl.textContent = state.cameraEnabled ? "Pause Camera" : "Resume Camera";
+      cameraToggleEl.setAttribute("aria-pressed", state.cameraEnabled ? "true" : "false");
+      cameraHintEl.textContent = state.cameraEnabled
+        ? "Live USB camera stream from Raspberry Pi. Pause it if controls feel laggy."
+        : "Camera stream paused locally to prioritize controls. Click Resume Camera to reconnect.";
       renderAuxControls();
       syncStatusOverflow();
     }
@@ -1493,11 +1516,23 @@
       }
     }
 
-    async function sendControl() {
+    function markControlDirty(sendNow = false) {
+      state.pendingControlSend = true;
+      if (sendNow) {
+        sendControl(true);
+      }
+    }
+
+    async function sendControl(force = false) {
       const msg = payload();
+      const body = JSON.stringify(msg);
+      if (!force && !state.pendingControlSend && body === state.lastSentPayload) {
+        return;
+      }
+
       if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
         const now = Date.now();
-        if (now - state.lastHttpSendMs < 120) {
+        if (!force && now - state.lastHttpSendMs < CONTROL_SEND_INTERVAL_MS) {
           return;
         }
         state.lastHttpSendMs = now;
@@ -1505,16 +1540,25 @@
           await fetch("/api/control", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(msg),
+            body,
           });
           state.usingHttpFallback = true;
+          state.pendingControlSend = false;
+          state.lastSentPayload = body;
         } catch (_) {
           state.usingHttpFallback = false;
         }
         renderStatus();
         return;
       }
-      state.ws.send(JSON.stringify(msg));
+
+      if (!force && state.ws.bufferedAmount > WS_BUFFER_LIMIT_BYTES) {
+        return;
+      }
+
+      state.ws.send(body);
+      state.pendingControlSend = false;
+      state.lastSentPayload = body;
     }
 
     function connectWs() {
@@ -1525,6 +1569,7 @@
         state.wsConnected = true;
         state.usingHttpFallback = false;
         renderStatus();
+        markControlDirty(true);
       };
       ws.onclose = () => {
         state.wsConnected = false;
@@ -1545,7 +1590,7 @@
         const data = await res.json();
         state.serialConnected = Boolean(data?.serial?.connected);
         state.esp32AppRunning = Boolean(data?.serial?.app_running);
-        state.cameraOk = Boolean(data?.camera?.has_frame);
+        state.cameraOk = state.cameraEnabled && Boolean(data?.camera?.has_frame);
         state.ack = data?.serial?.last_ack || "";
         state.leftDirection = data?.control?.direction?.left || "forward";
         state.rightDirection = data?.control?.direction?.right || "forward";
@@ -1572,14 +1617,14 @@
       releaseDumperControls();
       renderStatus();
       updateNumbers();
-      sendControl();
+      markControlDirty(true);
       await fetch("/api/stop", { method: "POST" });
     }
 
     function setDeadman(on) {
       state.deadman = on;
       renderStatus();
-      sendControl();
+      markControlDirty(true);
     }
 
     function setJoystickVisual(normX, normY) {
@@ -1615,7 +1660,7 @@
       throttleEl.value = String(Math.max(-100, Math.min(100, throttle)));
       setJoystickVisual(normX, normY);
       updateNumbers();
-      sendControl();
+      markControlDirty();
     }
 
     function barPowerFromPointer(trackEl, evt) {
@@ -1646,7 +1691,7 @@
       state.outputRight = Math.round((Math.abs(right) / 100) * maxOut);
 
       updateNumbers();
-      sendControl();
+      markControlDirty();
     }
 
     async function flipSide(side) {
@@ -1813,6 +1858,17 @@
       localStorage.setItem("roverSwapSides", state.swapSides ? "1" : "0");
       applyLayoutSwap();
     });
+    cameraToggleEl.addEventListener("click", () => {
+      state.cameraEnabled = !state.cameraEnabled;
+      localStorage.setItem("roverCameraEnabled", state.cameraEnabled ? "1" : "0");
+      if (state.cameraEnabled) {
+        cameraEl.src = CAMERA_SRC;
+      } else {
+        cameraEl.removeAttribute("src");
+        state.cameraOk = false;
+      }
+      renderStatus();
+    });
     statusToggleEl.addEventListener("click", () => {
       statusEl.classList.toggle("expanded");
       syncStatusOverflow();
@@ -1821,15 +1877,15 @@
 
     throttleEl.addEventListener("input", () => {
       updateNumbers();
-      sendControl();
+      markControlDirty();
     });
     steerEl.addEventListener("input", () => {
       updateNumbers();
-      sendControl();
+      markControlDirty();
     });
     maxDacEl.addEventListener("input", () => {
       updateNumbers();
-      sendControl();
+      markControlDirty();
     });
     joyMinThrottleEl.addEventListener("input", () => {
       updateNumbers();
@@ -1858,7 +1914,7 @@
       setJoystickVisual(steer / 100, -throttle / 100);
       updateNumbers();
       renderStatus();
-      sendControl();
+      markControlDirty();
     }
 
     window.addEventListener("keydown", (e) => {
@@ -1908,12 +1964,15 @@
 
     connectWs();
     applyLayoutSwap();
+    if (!state.cameraEnabled) {
+      cameraEl.removeAttribute("src");
+    }
     setJoystickVisual(0, 0);
     updateNumbers();
     renderStatus();
     syncStatusOverflow();
-    setInterval(sendControl, 60);
-    setInterval(pollStatus, 150);
+    setInterval(() => sendControl(false), CONTROL_SEND_INTERVAL_MS);
+    setInterval(pollStatus, STATUS_POLL_INTERVAL_MS);
   </script>
 </body>
 </html>
